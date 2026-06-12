@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import Any
 
 from .hypothesis import Hypothesis
+from .llm import LLMClient, LLMMessage
 from .models import TaskSpec
 
 
@@ -172,3 +174,110 @@ def _filter_values(
 def _memory_mentions(memories: list[dict[str, Any]], text: str) -> bool:
     needle = text.lower()
     return any(needle in str(memory).lower() for memory in memories)
+
+
+class LLMResearchAgent:
+    """LLM-backed hypothesis proposer with deterministic harness guardrails."""
+
+    def __init__(self, llm_client: LLMClient):
+        self.llm_client = llm_client
+
+    def propose(
+        self,
+        task: TaskSpec,
+        analysis: dict[str, Any],
+        source_run_id: str,
+        memories: list[dict[str, Any]] | None = None,
+    ) -> Hypothesis:
+        memories = memories or []
+        content = self.llm_client.complete(
+            [
+                LLMMessage(
+                    role="system",
+                    content=(
+                        "You propose bounded optimization hypotheses for an "
+                        "AutoResearch harness. Return only valid JSON. Do not "
+                        "include markdown."
+                    ),
+                ),
+                LLMMessage(
+                    role="user",
+                    content=json.dumps(
+                        {
+                            "task": {
+                                "name": task.name,
+                                "objective": task.objective,
+                                "executor": task.executor,
+                                "search_space": task.search_space,
+                                "primary_metric": task.primary_metric.__dict__,
+                                "guardrails": [
+                                    guardrail.__dict__ for guardrail in task.guardrail_metrics
+                                ],
+                            },
+                            "baseline_analysis": analysis,
+                            "recent_memories": memories[-10:],
+                            "required_schema": {
+                                "title": "short hypothesis title",
+                                "rationale": "why this direction should help",
+                                "expected_effects": {"metric_name": "expected change"},
+                                "risks": ["risk"],
+                                "search_space": "subset of the provided search_space",
+                                "validation_plan": "how to validate the hypothesis",
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                ),
+            ]
+        )
+        payload = _parse_llm_json(content)
+        return Hypothesis(
+            id=f"hyp_{source_run_id}_llm",
+            title=str(payload["title"]),
+            rationale=str(payload["rationale"]),
+            expected_effects=dict(payload.get("expected_effects", {})),
+            risks=list(payload.get("risks", [])),
+            search_space=_validated_search_space(task.search_space, payload["search_space"]),
+            validation_plan=str(payload["validation_plan"]),
+            source_run_id=source_run_id,
+        )
+
+
+def _parse_llm_json(content: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(content.strip())
+    except json.JSONDecodeError as exc:
+        raise ValueError("LLMResearchAgent expected valid JSON output") from exc
+    required = ["title", "rationale", "search_space", "validation_plan"]
+    missing = [key for key in required if key not in payload]
+    if missing:
+        raise ValueError(f"LLM hypothesis missing required fields: {missing}")
+    if not isinstance(payload["search_space"], dict):
+        raise ValueError("LLM hypothesis search_space must be an object")
+    return payload
+
+
+def _validated_search_space(
+    original: dict[str, dict[str, Any]],
+    proposed: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    validated = deepcopy(original)
+    for name, spec in proposed.items():
+        if name not in validated:
+            continue
+        original_spec = validated[name]
+        if original_spec.get("type", "categorical") == "categorical":
+            original_values = list(original_spec.get("values", []))
+            proposed_values = list(spec.get("values", []))
+            filtered = [value for value in proposed_values if value in original_values]
+            if filtered:
+                original_spec["values"] = filtered
+        elif original_spec.get("type") in {"float", "int"}:
+            min_value = max(original_spec["min"], spec.get("min", original_spec["min"]))
+            max_value = min(original_spec["max"], spec.get("max", original_spec["max"]))
+            if min_value <= max_value:
+                original_spec["min"] = min_value
+                original_spec["max"] = max_value
+                if "steps" in spec:
+                    original_spec["steps"] = max(1, int(spec["steps"]))
+    return validated

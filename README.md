@@ -39,6 +39,14 @@ Run the model-parameter tuning example with:
 python -m autoresearch_harness research examples\model_param_tuning\task.json --branch-mode record
 ```
 
+Use a model-backed research planner with an OpenAI-compatible API:
+
+```powershell
+$env:AUTORESEARCH_LLM_API_KEY="..."
+$env:AUTORESEARCH_LLM_MODEL="gpt-4.1-mini"
+python -m autoresearch_harness research examples\model_param_tuning\task.json --agent llm --branch-mode record
+```
+
 If the package is installed in your project virtual environment, the same demo
 can also be launched with:
 
@@ -80,9 +88,11 @@ baseline failure reasons, proposes a focused hypothesis, validates it, compares
 effects, and writes memory records under `memory/`.
 
 There is also a provider-agnostic LLM interface in
-`src/autoresearch_harness/llm.py`. No real model API is wired by default yet;
-the project intentionally keeps the harness stable with a deterministic agent
-before adding provider-specific LLM clients.
+`src/autoresearch_harness/llm.py`. The default research agent is deterministic;
+`--agent llm` uses an OpenAI-compatible chat-completions client configured by
+environment variables. The LLM only proposes a bounded hypothesis and candidate
+search space; execution, metrics, guardrails, memory, and branch metadata remain
+controlled by the harness.
 
 The intended extension points are:
 

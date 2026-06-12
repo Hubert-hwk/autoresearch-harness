@@ -9,7 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from autoresearch_harness.agent import LLMResearchAgent
 from autoresearch_harness.agentic import run_agentic_research
+from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.policy import generate_trials
 from autoresearch_harness.runner import run_task
@@ -79,6 +81,42 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertIn("stable cost-aware", hypothesis["title"])
             self.assertEqual([0.0, 0.2, 0.4], hypothesis["search_space"]["temperature"]["values"])
             self.assertEqual("accept", result["effect"]["recommendation"])
+
+    def test_llm_agent_validates_search_space(self) -> None:
+        task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
+        agent = LLMResearchAgent(
+            FakeLLMClient(
+                """
+                {
+                  "title": "LLM narrows stable decoding",
+                  "rationale": "Keep low temperature and moderate token budget.",
+                  "expected_effects": {"quality_score": "improve"},
+                  "risks": ["May miss long-answer cases"],
+                  "search_space": {
+                    "temperature": {"type": "categorical", "values": [0.2, 9.9]},
+                    "max_tokens": {"type": "categorical", "values": [1024, 9999]},
+                    "unknown_param": {"type": "categorical", "values": ["x"]}
+                  },
+                  "validation_plan": "Run model_param_tuning candidate trials."
+                }
+                """
+            )
+        )
+
+        hypothesis = agent.propose(task, {"failure_reasons": {}}, "source_run")
+
+        self.assertEqual([0.2], hypothesis.search_space["temperature"]["values"])
+        self.assertEqual([1024], hypothesis.search_space["max_tokens"]["values"])
+        self.assertNotIn("unknown_param", hypothesis.search_space)
+
+
+class FakeLLMClient:
+    def __init__(self, response: str):
+        self.response = response
+
+    def complete(self, messages: list[LLMMessage]) -> str:
+        self.messages = messages
+        return self.response
 
 
 if __name__ == "__main__":

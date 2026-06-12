@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     research_parser.add_argument("--memory-dir", type=Path, default=Path("memory"))
     research_parser.add_argument("--repo-root", type=Path, default=Path("."))
     research_parser.add_argument("--branch-mode", choices=["record", "create"], default="record")
+    research_parser.add_argument("--agent", choices=["rule", "llm"], default="rule")
 
     args = parser.parse_args(argv)
 
@@ -48,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=args.repo_root.resolve(),
             memory_dir=args.memory_dir,
             branch_mode=args.branch_mode,
+            agent_kind=args.agent,
         )
         effect = result["effect"]
         print(f"research_id={result['research_id']}")

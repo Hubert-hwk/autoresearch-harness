@@ -106,13 +106,24 @@ Implemented modules:
 - `effect.py`: baseline-vs-candidate comparison
 - `memory.py`: JSONL-backed memory streams
 - `agentic.py`: orchestration for the agentic research loop
-- `llm.py`: provider-agnostic LLM client interface placeholder
+- `llm.py`: provider-agnostic LLM client interface and OpenAI-compatible client
 
 Supported deterministic validation scenarios:
 
 - search/ranking parameter tuning
 - prompt tuning
 - model serving parameter tuning
+
+The `research` command supports two agent modes:
+
+- `--agent rule`: deterministic default planner used by tests and CI
+- `--agent llm`: OpenAI-compatible LLM planner configured with environment
+  variables such as `AUTORESEARCH_LLM_API_KEY`, `AUTORESEARCH_LLM_MODEL`, and
+  `AUTORESEARCH_LLM_BASE_URL`
+
+LLM output is constrained to a hypothesis and bounded candidate search space.
+The harness still controls execution, metrics, guardrails, branch metadata,
+memory, and final decisions.
 
 Validation command:
 
@@ -138,7 +149,7 @@ Missing major capabilities:
 
 - LLM-backed or model-backed `ResearchAgent` that proposes optimization
   directions from objectives, context, metrics, history, and failures
-- provider-specific LLM clients, such as OpenAI-compatible API adapters
+- richer provider-specific LLM clients and prompt templates
 - richer `Hypothesis` planning with code/config/prompt mutations
 - richer `MemoryManager` retrieval over lessons, successful patterns, failure
   patterns, bad cases, and domain notes
@@ -163,7 +174,7 @@ Preferred first implementation:
    trials, not just recent JSONL records.
 4. Add one semi-real executor, such as prompt eval against a real model or a
    business offline-eval command adapter.
-5. Add GitHub CI and push the repository to a remote baseline.
+5. Expand GitHub CI beyond unit tests when real executors are available.
 
 This should be implemented locally first. After the v0.2 loop is demonstrable,
 push the repository to GitHub as the first meaningful public or private remote

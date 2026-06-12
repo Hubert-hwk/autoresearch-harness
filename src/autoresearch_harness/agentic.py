@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .agent import RuleBasedResearchAgent
+from .agent import LLMResearchAgent, RuleBasedResearchAgent
 from .branching import BranchManager, branch_record_to_dict
 from .effect import compare_runs
+from .llm import OpenAICompatibleClient
 from .memory import MemoryManager
 from .models import Budget, RunSummary, TaskSpec
 from .runner import run_task
@@ -20,6 +21,7 @@ def run_agentic_research(
     repo_root: Path,
     memory_dir: Path,
     branch_mode: str = "record",
+    agent_kind: str = "rule",
 ) -> dict[str, Any]:
     research_id = datetime.now(timezone.utc).strftime("agentic_%Y%m%dT%H%M%S%fZ")
     research_dir = runs_dir / research_id
@@ -29,7 +31,7 @@ def run_agentic_research(
     baseline_analysis = _read_analysis(research_dir / "baseline", baseline_summary)
 
     memory = MemoryManager(memory_dir)
-    agent = RuleBasedResearchAgent()
+    agent = _make_agent(agent_kind)
     hypothesis = agent.propose(
         task,
         baseline_analysis,
@@ -60,6 +62,7 @@ def run_agentic_research(
         "candidate_run_id": candidate_summary.run_id,
         "hypothesis": asdict(hypothesis),
         "branch": branch_record_to_dict(branch_record),
+        "agent_kind": agent_kind,
         "effect": effect,
         "paths": {
             "research_dir": str(research_dir),
@@ -89,6 +92,14 @@ def _candidate_task(task: TaskSpec, search_space: dict[str, dict[str, Any]]) -> 
     )
 
 
+def _make_agent(agent_kind: str):
+    if agent_kind == "rule":
+        return RuleBasedResearchAgent()
+    if agent_kind == "llm":
+        return LLMResearchAgent(OpenAICompatibleClient.from_env())
+    raise ValueError(f"Unsupported agent kind: {agent_kind}")
+
+
 def _read_analysis(parent: Path, summary: RunSummary) -> dict[str, Any]:
     path = parent / summary.run_id / "analysis.json"
     return json.loads(path.read_text(encoding="utf-8"))
@@ -115,6 +126,7 @@ def _write_report(path: Path, result: dict[str, Any]) -> None:
         "",
         f"- Hypothesis: `{result['hypothesis']['title']}`",
         f"- Branch mode: `{result['branch']['mode']}`",
+        f"- Agent: `{result['agent_kind']}`",
         f"- Experiment branch: `{result['branch']['experiment_branch']}`",
         f"- Recommendation: `{effect['recommendation']}`",
         f"- Reason: {effect['reason']}",
