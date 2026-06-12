@@ -26,9 +26,12 @@ from .memory import MemoryManager
 from .memory_index import build_memory_context, compact_memory_context, records_from_context
 from .models import Budget, MetricGoal, RunSummary, TaskSpec, TrialResult
 from .mutation import (
+    MutationArtifact,
     MutationPlan,
-    apply_mutation_plan,
     build_mutation_plan,
+    materialize_mutation_artifact,
+    mutation_artifact_from_dict,
+    mutation_artifact_to_dict,
     mutation_plan_from_dict,
     mutation_plan_to_dict,
 )
@@ -169,9 +172,31 @@ def _continue_agentic_research(
             "candidate_budget": mutation_plan.candidate_budget,
         },
     )
+    state = _read_state(research_dir)
+    mutation_artifact = _ensure_mutation_artifact(
+        task=task,
+        mutation_plan=mutation_plan,
+        research_dir=research_dir,
+        registry=registry,
+        repo_root=repo_root,
+        state=state,
+    )
+    branch_lifecycle = _advance_branch_lifecycle(
+        branch_lifecycle,
+        research_dir,
+        registry,
+        event_name="mutation_materialized",
+        status="mutation_materialized",
+        metadata={
+            "task_path": mutation_artifact.task_path,
+            "diff_path": mutation_artifact.diff_path,
+            "changed": mutation_artifact.changed,
+        },
+    )
 
     state = _read_state(research_dir)
-    candidate_summary = _ensure_candidate(task, mutation_plan, research_dir, registry, state)
+    candidate_task = load_task(Path(mutation_artifact.task_path))
+    candidate_summary = _ensure_candidate(candidate_task, research_dir, registry, state)
     branch_lifecycle = _advance_branch_lifecycle(
         branch_lifecycle,
         research_dir,
@@ -193,6 +218,7 @@ def _continue_agentic_research(
         candidate_analysis=candidate_analysis,
         hypothesis=hypothesis,
         mutation_plan=mutation_plan,
+        mutation_artifact=mutation_artifact,
         branch_lifecycle=branch_lifecycle,
         branch=branch_record_to_dict(branch_record),
         agent_kind=agent_kind,
@@ -479,9 +505,76 @@ def _register_branch_lifecycle(
     )
 
 
-def _ensure_candidate(
+def _ensure_mutation_artifact(
     task: TaskSpec,
     mutation_plan: MutationPlan,
+    research_dir: Path,
+    registry: ResearchRegistry,
+    repo_root: Path,
+    state: dict[str, Any],
+) -> MutationArtifact:
+    if state.get("mutation_artifact"):
+        artifact = mutation_artifact_from_dict(state["mutation_artifact"])
+        if Path(artifact.task_path).exists() and Path(artifact.diff_path).exists():
+            _register_mutation_artifact(research_dir, registry, artifact)
+            return artifact
+
+    artifact = materialize_mutation_artifact(
+        task=task,
+        plan=mutation_plan,
+        artifact_dir=research_dir / "mutation_artifact",
+        repo_root=repo_root,
+    )
+    artifact_dict = mutation_artifact_to_dict(artifact)
+    registry.state(mutation_artifact=artifact_dict)
+    registry.event(
+        "mutation_artifact_materialized",
+        {
+            "task_path": artifact.task_path,
+            "diff_path": artifact.diff_path,
+            "changed": artifact.changed,
+        },
+    )
+    _register_mutation_artifact(research_dir, registry, artifact)
+    return artifact
+
+
+def _register_mutation_artifact(
+    research_dir: Path,
+    registry: ResearchRegistry,
+    artifact: MutationArtifact,
+) -> None:
+    task_path = Path(artifact.task_path)
+    diff_path = Path(artifact.diff_path)
+    registry.artifact("mutation_artifact", task_path, "Materialized candidate task produced by mutation protocol")
+    registry.artifact(
+        "mutation_diff",
+        diff_path,
+        "Git no-index diff between baseline task and materialized candidate task",
+        {"changed": artifact.changed, "diff_exit_code": artifact.diff_exit_code},
+    )
+    provenance = ProvenanceRecorder(research_dir)
+    provenance.record(
+        "mutation_artifact",
+        "task",
+        task_path,
+        "mutation_protocol",
+        depends_on=["task_snapshot", "mutation_plan"],
+        supports=["mutation_diff", "candidate_task"],
+    )
+    provenance.record(
+        "mutation_diff",
+        "diff",
+        diff_path,
+        "git_diff_no_index",
+        depends_on=["task_snapshot", "mutation_plan", "mutation_artifact"],
+        supports=["branch_lifecycle", "candidate_task", "decision"],
+        metadata={"changed": artifact.changed, "diff_exit_code": artifact.diff_exit_code},
+    )
+
+
+def _ensure_candidate(
+    candidate_task: TaskSpec,
     research_dir: Path,
     registry: ResearchRegistry,
     state: dict[str, Any],
@@ -490,8 +583,7 @@ def _ensure_candidate(
         candidate_dir = research_dir / "candidate" / state["candidate_run_id"]
         _register_run_artifacts(registry, candidate_dir, "candidate")
         _register_run_provenance(research_dir, candidate_dir, "candidate")
-        return _summary_from_run_dir(candidate_dir, f"{task.name}_agentic_candidate")
-    candidate_task = apply_mutation_plan(task, mutation_plan)
+        return _summary_from_run_dir(candidate_dir, candidate_task.name)
     candidate_summary = run_task(candidate_task, research_dir / "candidate")
     candidate_dir = research_dir / "candidate" / candidate_summary.run_id
     registry.state(phase="evaluation", candidate_run_id=candidate_summary.run_id)
@@ -521,6 +613,7 @@ def _finalize_research(
     candidate_analysis: dict[str, Any],
     hypothesis,
     mutation_plan: MutationPlan,
+    mutation_artifact: MutationArtifact,
     branch_lifecycle: BranchLifecycle,
     branch: dict[str, Any],
     agent_kind: str,
@@ -540,6 +633,7 @@ def _finalize_research(
             "decision": decision,
             "branch": branch,
             "branch_lifecycle": branch_lifecycle_to_dict(branch_lifecycle),
+            "mutation_artifact": mutation_artifact_to_dict(mutation_artifact),
         }
     )
     memory.record_lesson(_lesson(research_id, hypothesis.id, effect, decision))
@@ -550,6 +644,7 @@ def _finalize_research(
         "candidate_run_id": candidate_summary.run_id,
         "hypothesis": asdict(hypothesis),
         "mutation_plan": mutation_plan_to_dict(mutation_plan),
+        "mutation_artifact": mutation_artifact_to_dict(mutation_artifact),
         "branch": branch,
         "branch_lifecycle": branch_lifecycle_to_dict(branch_lifecycle),
         "agent_kind": agent_kind,
@@ -568,7 +663,14 @@ def _finalize_research(
         "effect",
         research_dir / "effect.json",
         "effect_evaluator",
-        depends_on=["baseline_analysis", "candidate_analysis", "hypothesis", "mutation_plan"],
+        depends_on=[
+            "baseline_analysis",
+            "candidate_analysis",
+            "hypothesis",
+            "mutation_plan",
+            "mutation_artifact",
+            "mutation_diff",
+        ],
         supports=["decision", "lesson"],
     )
     _write_json(research_dir / "decision.json", result["decision"])
@@ -584,6 +686,8 @@ def _finalize_research(
             "candidate_analysis",
             "hypothesis",
             "mutation_plan",
+            "mutation_artifact",
+            "mutation_diff",
             "branch",
             "branch_lifecycle",
         ],
@@ -597,7 +701,16 @@ def _finalize_research(
         "result",
         research_dir / "agentic_result.json",
         "agentic_runner",
-        depends_on=["decision", "effect", "hypothesis", "mutation_plan", "branch", "branch_lifecycle"],
+        depends_on=[
+            "decision",
+            "effect",
+            "hypothesis",
+            "mutation_plan",
+            "mutation_artifact",
+            "mutation_diff",
+            "branch",
+            "branch_lifecycle",
+        ],
         supports=["report"],
     )
     _write_report(research_dir / "report.md", result)
@@ -760,6 +873,7 @@ def _write_report(path: Path, result: dict[str, Any]) -> None:
         f"- Hypothesis: `{result['hypothesis']['title']}`",
         f"- Mutation protocol: `{result['mutation_plan']['protocol_version']}`",
         f"- Mutation operations: `{len(result['mutation_plan']['operations'])}`",
+        f"- Mutation diff: `{result['mutation_artifact']['diff_path']}`",
         f"- Branch mode: `{result['branch']['mode']}`",
         f"- Agent: `{result['agent_kind']}`",
         f"- Experiment branch: `{result['branch']['experiment_branch']}`",
@@ -813,7 +927,13 @@ def _register_run_provenance(research_dir: Path, run_dir: Path, phase: str) -> N
         "report": [f"{phase}_analysis", f"{phase}_decisions"],
     }
     if phase == "candidate":
-        dependencies["task"] = ["task_snapshot", "hypothesis", "mutation_plan"]
+        dependencies["task"] = [
+            "task_snapshot",
+            "hypothesis",
+            "mutation_plan",
+            "mutation_artifact",
+            "mutation_diff",
+        ]
     producers = {
         "task": "runner",
         "trials": "executor",

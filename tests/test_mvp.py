@@ -21,6 +21,7 @@ from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.memory_index import build_memory_context
 from autoresearch_harness.mutation import apply_mutation_plan, build_mutation_plan
+from autoresearch_harness.mutation import materialize_mutation_artifact
 from autoresearch_harness.policy import generate_trials
 from autoresearch_harness.provenance import evidence_for
 from autoresearch_harness.registry import load_research_status
@@ -67,6 +68,8 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertTrue((research_dir / "hypothesis.json").exists())
             self.assertTrue((research_dir / "branch_lifecycle.json").exists())
             self.assertTrue((research_dir / "mutation_plan.json").exists())
+            self.assertTrue((research_dir / "mutation_artifact" / "candidate_task.json").exists())
+            self.assertTrue((research_dir / "mutation_artifact" / "mutation.diff").exists())
             self.assertTrue((research_dir / "effect.json").exists())
             self.assertTrue((research_dir / "decision.json").exists())
             self.assertTrue((research_dir / "state.json").exists())
@@ -82,6 +85,7 @@ class MvpHarnessTest(unittest.TestCase):
             }
             self.assertIn("branch_prepared", lifecycle_events)
             self.assertIn("mutation_attached", lifecycle_events)
+            self.assertIn("mutation_materialized", lifecycle_events)
             self.assertIn("candidate_executed", lifecycle_events)
             self.assertIn("decision_recorded", lifecycle_events)
 
@@ -98,6 +102,8 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertIn("effect", evidence_ids)
             self.assertIn("branch_lifecycle", evidence_ids)
             self.assertIn("mutation_plan", evidence_ids)
+            self.assertIn("mutation_artifact", evidence_ids)
+            self.assertIn("mutation_diff", evidence_ids)
             self.assertIn("baseline_analysis", evidence_ids)
             self.assertIn("candidate_analysis", evidence_ids)
 
@@ -128,9 +134,13 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertTrue((research_dir / "memory_context.json").exists())
             self.assertTrue((research_dir / "branch_lifecycle.json").exists())
             self.assertTrue((research_dir / "mutation_plan.json").exists())
+            self.assertTrue((research_dir / "mutation_artifact" / "candidate_task.json").exists())
+            self.assertTrue((research_dir / "mutation_artifact" / "mutation.diff").exists())
             self.assertIn("memory_context", provenance_ids)
             self.assertIn("branch_lifecycle", provenance_ids)
             self.assertIn("mutation_plan", provenance_ids)
+            self.assertIn("mutation_artifact", provenance_ids)
+            self.assertIn("mutation_diff", provenance_ids)
             self.assertTrue(status["state"]["memory_context"]["matches"])
             self.assertIn("stable cost-aware", hypothesis["title"])
             self.assertEqual([0.0, 0.2, 0.4], hypothesis["search_space"]["temperature"]["values"])
@@ -140,7 +150,7 @@ class MvpHarnessTest(unittest.TestCase):
             )
             self.assertEqual("accept", result["decision"]["decision"])
 
-    def test_mutation_plan_validates_search_space_subset(self) -> None:
+    def test_mutation_plan_validates_search_space_subset_and_materializes_diff(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
         hypothesis = Hypothesis(
             id="hyp_subset",
@@ -166,6 +176,18 @@ class MvpHarnessTest(unittest.TestCase):
         self.assertNotIn("unknown_param", plan.candidate_search_space)
         self.assertEqual(plan.candidate_budget, candidate_task.budget.max_trials)
         self.assertTrue(plan.operations)
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = materialize_mutation_artifact(
+                task,
+                plan,
+                Path(tmp) / "mutation_artifact",
+                ROOT,
+            )
+
+            self.assertTrue(Path(artifact.task_path).exists())
+            self.assertTrue(Path(artifact.diff_path).exists())
+            self.assertTrue(artifact.changed)
+            self.assertIn("temperature", Path(artifact.diff_path).read_text(encoding="utf-8"))
 
     def test_branch_lifecycle_tracks_disposition_and_idempotent_events(self) -> None:
         record = BranchRecord(

@@ -155,6 +155,10 @@ Agentic runs now write:
 - `branch_lifecycle.json`: experiment branch phase and disposition record
 - `mutation_plan.json`: validated mutation manifest applied before candidate
   execution
+- `mutation_artifact/candidate_task.json`: materialized candidate task used for
+  candidate execution
+- `mutation_artifact/mutation.diff`: git no-index diff between the baseline
+  task and candidate task artifact
 
 Memory retrieval is intentionally lightweight in this version. The
 `MemoryManager` still stores append-only JSONL lessons, while
@@ -171,6 +175,11 @@ operations, and derives the candidate task from that manifest. This gives the
 system a stable place to later add prompt patches, config patches, code diffs,
 and branch commits without letting free-form agent output directly mutate the
 workspace.
+The current implementation also materializes the mutation into
+`mutation_artifact/candidate_task.json` and captures
+`mutation_artifact/mutation.diff` with `git diff --no-index`. Candidate
+execution reloads the materialized task artifact rather than relying on an
+in-memory mutated object.
 
 Branch lifecycle is now explicit but still conservative. `branch.json` records
 base branch, base commit, experiment branch, mode, and whether a branch was
@@ -213,8 +222,8 @@ Missing major capabilities:
 - richer `MemoryManager` retrieval over successful patterns, failure patterns,
   bad cases, domain notes, and semantic similarity beyond the current rule
   based memory index
-- full branch lifecycle with trial commits, diff capture, rollback, remote
-  branch push, and optional PR creation
+- full branch lifecycle with trial commits, worktree patch application,
+  rollback, remote branch push, and optional PR creation
 - stronger `EffectEvaluator` with confidence, regressions, and statistical
   comparison
 - `DecisionEngine`: accept, reject, retry, mutate, expand search, or stop
@@ -230,8 +239,9 @@ Build `v0.3 applied research integration`.
 
 Preferred first implementation:
 
-1. Add a real mutation interface for code/config/prompt changes.
-2. Capture diffs and optional trial commits per hypothesis.
+1. Add a real mutation interface for code/config/prompt changes beyond task
+   artifact materialization.
+2. Capture optional trial commits per hypothesis.
 3. Continue strengthening memory retrieval beyond the current lightweight
    relevance index, especially supporting trials and failure patterns.
 4. Add one semi-real executor, such as prompt eval against a real model or a

@@ -96,6 +96,10 @@ directory containing:
 - `branch_lifecycle.json`: experiment branch phase and disposition record
 - `mutation_plan.json`: validated mutation protocol manifest derived from the
   hypothesis
+- `mutation_artifact/candidate_task.json`: materialized candidate task used by
+  the candidate run
+- `mutation_artifact/mutation.diff`: git no-index diff between the baseline
+  task and materialized candidate task
 - `branch.json`: experiment branch metadata
 - `effect.json`: baseline-vs-candidate comparison
 - `decision.json`: accept/reject/retry/needs_review decision and next action
@@ -142,6 +146,9 @@ safe search-space mutations only: the candidate task may narrow parameter
 values within the original task bounds, but it cannot introduce unknown
 parameters or out-of-contract values. The candidate run is derived from this
 manifest rather than directly from free-form agent output.
+The mutation plan is then materialized into a candidate task artifact and a
+standard git diff. The candidate run reloads that materialized task, so the
+actual run input is inspectable and reproducible.
 
 Branch lifecycle is tracked separately from branch metadata. `branch.json`
 records the base and experiment branch identity; `branch_lifecycle.json`
@@ -157,7 +164,7 @@ Agentic runs separate metric comparison from governance decisions:
 - `decision.json` records the harness decision, confidence, reasons,
   blocking guardrails, and next action
 - `provenance.jsonl` records dependencies such as
-  `decision -> effect -> candidate analysis -> mutation plan -> branch lifecycle`
+  `decision -> effect -> candidate analysis -> mutation artifact -> mutation diff`
 
 The intended extension points are:
 
