@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
 from autoresearch_harness.agentic import run_agentic_research
+from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.policy import generate_trials
 from autoresearch_harness.runner import run_task
 from autoresearch_harness.spec import load_task
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class MvpHarnessTest(unittest.TestCase):
@@ -53,6 +55,30 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertTrue((root / "memory" / "lessons.jsonl").exists())
             self.assertEqual("accept", result["effect"]["recommendation"])
             self.assertEqual("record", result["branch"]["mode"])
+
+    def test_model_param_tuning_agentic_loop_uses_memory(self) -> None:
+        task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            memory = MemoryManager(root / "memory")
+            memory.record_lesson(
+                {
+                    "lesson": "Prior model tuning failed because stability_score dropped.",
+                    "recommendation": "retry",
+                }
+            )
+            result = run_agentic_research(
+                task=task,
+                runs_dir=root / "runs",
+                repo_root=ROOT,
+                memory_dir=root / "memory",
+                branch_mode="record",
+            )
+
+            hypothesis = result["hypothesis"]
+            self.assertIn("stable cost-aware", hypothesis["title"])
+            self.assertEqual([0.0, 0.2, 0.4], hypothesis["search_space"]["temperature"]["values"])
+            self.assertEqual("accept", result["effect"]["recommendation"])
 
 
 if __name__ == "__main__":

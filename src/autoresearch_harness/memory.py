@@ -33,6 +33,22 @@ class MemoryManager:
     def record_lesson(self, lesson: dict[str, Any]) -> Path:
         return self.append("lessons", lesson)
 
+    def read_stream(self, stream: str, limit: int | None = None) -> list[dict[str, Any]]:
+        path = self.memory_dir / f"{stream}.jsonl"
+        if not path.exists():
+            return []
+        records = [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if limit is None:
+            return records
+        return records[-limit:]
+
+    def recent_lessons(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self.read_stream("lessons", limit=limit)
+
 
 def _json_ready(value: Any) -> Any:
     if is_dataclass(value):
@@ -42,4 +58,3 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, list):
         return [_json_ready(item) for item in value]
     return value
-

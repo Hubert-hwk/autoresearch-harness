@@ -28,8 +28,14 @@ def run_agentic_research(
     baseline_summary = run_task(task, research_dir / "baseline")
     baseline_analysis = _read_analysis(research_dir / "baseline", baseline_summary)
 
+    memory = MemoryManager(memory_dir)
     agent = RuleBasedResearchAgent()
-    hypothesis = agent.propose(task, baseline_analysis, baseline_summary.run_id)
+    hypothesis = agent.propose(
+        task,
+        baseline_analysis,
+        baseline_summary.run_id,
+        memories=memory.recent_lessons(),
+    )
     branch_record = BranchManager(repo_root).prepare(hypothesis.id, mode=branch_mode)
 
     candidate_task = _candidate_task(task, hypothesis.search_space)
@@ -37,7 +43,6 @@ def run_agentic_research(
     candidate_analysis = _read_analysis(research_dir / "candidate", candidate_summary)
 
     effect = compare_runs(task, baseline_analysis, candidate_analysis)
-    memory = MemoryManager(memory_dir)
     memory.record_hypothesis(hypothesis)
     memory.record_decision(
         {
@@ -121,4 +126,3 @@ def _write_report(path: Path, result: dict[str, Any]) -> None:
         "```",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-

@@ -1,0 +1,5 @@
+{"case_id":"m001","base_quality":0.52,"target_temperature":0.2,"target_context_tokens":900,"ideal_retrieval_depth":2,"risk_temperature":0.7,"base_latency_ms":520,"base_cost_usd":0.004}
+{"case_id":"m002","base_quality":0.48,"target_temperature":0.4,"target_context_tokens":1100,"ideal_retrieval_depth":2,"risk_temperature":0.8,"base_latency_ms":610,"base_cost_usd":0.005}
+{"case_id":"m003","base_quality":0.55,"target_temperature":0.2,"target_context_tokens":1400,"ideal_retrieval_depth":3,"risk_temperature":0.7,"base_latency_ms":580,"base_cost_usd":0.006}
+{"case_id":"m004","base_quality":0.46,"target_temperature":0.0,"target_context_tokens":800,"ideal_retrieval_depth":1,"risk_temperature":0.6,"base_latency_ms":500,"base_cost_usd":0.004}
+

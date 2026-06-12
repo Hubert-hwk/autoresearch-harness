@@ -1,0 +1,48 @@
+{
+  "name": "model_param_tuning_mvp",
+  "objective": "Improve model serving quality while controlling latency, cost, and stability.",
+  "executor": "model_param_tuning",
+  "dataset": "dataset.jsonl",
+  "budget": {
+    "max_trials": 30
+  },
+  "search_space": {
+    "temperature": {
+      "type": "categorical",
+      "values": [0.0, 0.2, 0.4, 0.7, 1.0]
+    },
+    "top_p": {
+      "type": "categorical",
+      "values": [0.7, 0.85, 1.0]
+    },
+    "max_tokens": {
+      "type": "categorical",
+      "values": [512, 1024, 2048]
+    },
+    "retrieval_depth": {
+      "type": "categorical",
+      "values": [1, 2, 4]
+    }
+  },
+  "metrics": {
+    "primary": {
+      "name": "quality_score",
+      "direction": "maximize"
+    },
+    "guardrails": [
+      {
+        "name": "latency_ms",
+        "max": 1350
+      },
+      {
+        "name": "cost_usd",
+        "max": 0.03
+      },
+      {
+        "name": "stability_score",
+        "min": 0.72
+      }
+    ]
+  }
+}
+

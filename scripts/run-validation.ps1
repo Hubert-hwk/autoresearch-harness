@@ -13,4 +13,6 @@ Set-Location $repoRoot
 & $python -m unittest discover -s tests
 & $python -m autoresearch_harness run examples\ranking_param_tuning\task.json
 & $python -m autoresearch_harness run examples\prompt_tuning\task.json
+& $python -m autoresearch_harness run examples\model_param_tuning\task.json
 & $python -m autoresearch_harness research examples\prompt_tuning\task.json --branch-mode record
+& $python -m autoresearch_harness research examples\model_param_tuning\task.json --branch-mode record

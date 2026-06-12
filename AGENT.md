@@ -74,6 +74,7 @@ Implemented modules:
 - `analysis.py`: pass rate, failure reasons, and top trials
 - `adapters/ranking_param_tuning.py`: search/ranking style parameter demo
 - `adapters/prompt_tuning.py`: prompt tuning style demo
+- `adapters/model_param_tuning.py`: model serving parameter tuning demo
 
 Validation assets:
 
@@ -105,6 +106,13 @@ Implemented modules:
 - `effect.py`: baseline-vs-candidate comparison
 - `memory.py`: JSONL-backed memory streams
 - `agentic.py`: orchestration for the agentic research loop
+- `llm.py`: provider-agnostic LLM client interface placeholder
+
+Supported deterministic validation scenarios:
+
+- search/ranking parameter tuning
+- prompt tuning
+- model serving parameter tuning
 
 Validation command:
 
@@ -130,6 +138,7 @@ Missing major capabilities:
 
 - LLM-backed or model-backed `ResearchAgent` that proposes optimization
   directions from objectives, context, metrics, history, and failures
+- provider-specific LLM clients, such as OpenAI-compatible API adapters
 - richer `Hypothesis` planning with code/config/prompt mutations
 - richer `MemoryManager` retrieval over lessons, successful patterns, failure
   patterns, bad cases, and domain notes
@@ -150,7 +159,8 @@ Preferred first implementation:
 
 1. Add a real mutation interface for code/config/prompt changes.
 2. Capture diffs and optional trial commits per hypothesis.
-3. Add a retrievable memory read path that influences new hypotheses.
+3. Add stronger memory retrieval that ranks relevant lessons and supporting
+   trials, not just recent JSONL records.
 4. Add one semi-real executor, such as prompt eval against a real model or a
    business offline-eval command adapter.
 5. Add GitHub CI and push the repository to a remote baseline.
