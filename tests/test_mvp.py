@@ -14,6 +14,7 @@ from autoresearch_harness.agentic import resume_agentic_research, run_agentic_re
 from autoresearch_harness.decision import make_decision
 from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
+from autoresearch_harness.memory_index import build_memory_context
 from autoresearch_harness.policy import generate_trials
 from autoresearch_harness.provenance import evidence_for
 from autoresearch_harness.registry import load_research_status
@@ -101,9 +102,47 @@ class MvpHarnessTest(unittest.TestCase):
             )
 
             hypothesis = result["hypothesis"]
+            research_dir = Path(result["paths"]["research_dir"])
+            status = load_research_status(root / "runs", result["research_id"])
+            provenance_ids = {record["artifact_id"] for record in status["provenance"]}
+
+            self.assertTrue((research_dir / "memory_context.json").exists())
+            self.assertIn("memory_context", provenance_ids)
+            self.assertTrue(status["state"]["memory_context"]["matches"])
             self.assertIn("stable cost-aware", hypothesis["title"])
             self.assertEqual([0.0, 0.2, 0.4], hypothesis["search_space"]["temperature"]["values"])
             self.assertEqual("accept", result["decision"]["decision"])
+
+    def test_memory_index_ranks_relevant_lessons(self) -> None:
+        task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
+        memories = [
+            {
+                "research_id": "prompt_run",
+                "hypothesis_id": "prompt_hyp",
+                "lesson": "Prompt tuning accepted a stricter evidence policy.",
+                "recommendation": "accept",
+            },
+            {
+                "research_id": "model_run",
+                "hypothesis_id": "model_hyp",
+                "lesson": "model_param_tuning failed because stability_score dropped at high temperature.",
+                "recommendation": "retry",
+                "supporting_decision": {"blocking_guardrails": ["stability_score"]},
+            },
+        ]
+
+        context = build_memory_context(
+            task,
+            {"failure_reasons": {"stability_score": 4}},
+            memories,
+        )
+
+        self.assertEqual("model_run:model_hyp", context["matches"][0]["memory_id"])
+        self.assertIn("failure:stability_score", context["matches"][0]["reasons"])
+        self.assertGreater(
+            context["matches"][0]["score"],
+            context["matches"][1]["score"],
+        )
 
     def test_llm_agent_validates_search_space(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")

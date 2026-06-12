@@ -13,6 +13,7 @@ from .effect import compare_runs
 from .hypothesis import Hypothesis
 from .llm import OpenAICompatibleClient
 from .memory import MemoryManager
+from .memory_index import build_memory_context, compact_memory_context, records_from_context
 from .models import Budget, MetricGoal, RunSummary, TaskSpec, TrialResult
 from .provenance import ProvenanceRecorder, evidence_for, load_provenance
 from .registry import ResearchRegistry, resolve_research_dir
@@ -198,6 +199,7 @@ def _ensure_hypothesis(
     state: dict[str, Any],
 ):
     if state.get("hypothesis"):
+        _register_memory_context_if_present(research_dir, registry)
         hypothesis = _hypothesis_from_dict(state["hypothesis"])
         hypothesis_path = research_dir / "hypothesis.json"
         if not hypothesis_path.exists():
@@ -213,12 +215,33 @@ def _ensure_hypothesis(
         )
         return hypothesis
     memory = MemoryManager(memory_dir)
+    memory_context = build_memory_context(
+        task,
+        baseline_analysis,
+        memory.recent_lessons(limit=50),
+    )
+    memory_context_path = research_dir / "memory_context.json"
+    _write_json(memory_context_path, memory_context)
+    registry.artifact(
+        "memory_context",
+        memory_context_path,
+        "Ranked project memory used for hypothesis planning",
+    )
+    ProvenanceRecorder(research_dir).record(
+        "memory_context",
+        "memory_context",
+        memory_context_path,
+        "memory_index",
+        depends_on=["baseline_analysis"],
+        supports=["hypothesis"],
+    )
+    registry.state(memory_context=compact_memory_context(memory_context))
     agent = _make_agent(agent_kind)
     hypothesis = agent.propose(
         task,
         baseline_analysis,
         baseline_run_id,
-        memories=memory.recent_lessons(),
+        memories=records_from_context(memory_context),
     )
     hypothesis_dict = asdict(hypothesis)
     _write_json(research_dir / "hypothesis.json", hypothesis_dict)
@@ -234,6 +257,28 @@ def _ensure_hypothesis(
     registry.state(phase="branch", hypothesis=hypothesis_dict)
     registry.event("hypothesis_proposed", {"hypothesis_id": hypothesis.id, "title": hypothesis.title})
     return hypothesis
+
+
+def _register_memory_context_if_present(
+    research_dir: Path,
+    registry: ResearchRegistry,
+) -> None:
+    memory_context_path = research_dir / "memory_context.json"
+    if not memory_context_path.exists():
+        return
+    registry.artifact(
+        "memory_context",
+        memory_context_path,
+        "Ranked project memory used for hypothesis planning",
+    )
+    ProvenanceRecorder(research_dir).record(
+        "memory_context",
+        "memory_context",
+        memory_context_path,
+        "memory_index",
+        depends_on=["baseline_analysis"],
+        supports=["hypothesis"],
+    )
 
 
 def _ensure_branch(

@@ -91,6 +91,7 @@ directory containing:
 - `events.jsonl`: ordered lifecycle events
 - `artifacts.jsonl`: artifact index for reports, metrics, decisions, and inputs
 - `provenance.jsonl`: evidence graph linking decisions to supporting artifacts
+- `memory_context.json`: ranked prior lessons used by the agent planner
 - `hypothesis.json`: agent-proposed optimization direction
 - `branch.json`: experiment branch metadata
 - `effect.json`: baseline-vs-candidate comparison
@@ -125,6 +126,12 @@ system can recover which phase completed, which run ids were produced, and
 which artifacts contain the evidence trail.
 The `resume` command can continue from completed baseline, hypothesis, branch,
 or candidate phases without rerunning earlier completed phases.
+
+Before proposing a hypothesis, the agentic loop now builds a lightweight memory
+index from `memory/lessons.jsonl`. It ranks prior lessons by executor, failed
+guardrails, primary metric, and search-space parameter overlap, writes the
+selected context to `memory_context.json`, and links it into provenance as
+evidence for the hypothesis.
 
 Agentic runs separate metric comparison from governance decisions:
 

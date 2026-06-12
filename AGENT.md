@@ -107,6 +107,7 @@ Implemented modules:
 - `effect.py`: baseline-vs-candidate comparison
 - `decision.py`: harness decision engine for accept/reject/retry/needs_review
 - `memory.py`: JSONL-backed memory streams
+- `memory_index.py`: relevance ranking for prior lessons before planning
 - `agentic.py`: orchestration for the agentic research loop
 - `llm.py`: provider-agnostic LLM client interface and OpenAI-compatible client
 - `registry.py`: durable state, events, and artifact index for resumability
@@ -146,6 +147,15 @@ Agentic runs now write:
   hypothesis, branch metadata, effect, decision, and final result
 - `provenance.jsonl`: dependency graph connecting decision evidence back to
   hypothesis, effect, baseline/candidate analysis, and trial artifacts
+- `memory_context.json`: ranked prior lessons selected for the hypothesis step
+
+Memory retrieval is intentionally lightweight in this version. The
+`MemoryManager` still stores append-only JSONL lessons, while
+`memory_index.py` scores lessons against the current executor, baseline failure
+reasons, guardrail metrics, primary metric, and search-space parameters. The
+selected memory context is written as a first-class artifact before the agent
+proposes a hypothesis, so later readers can inspect which prior knowledge was
+available to the planner.
 
 Use `python -m autoresearch_harness status --research-id <id>` to inspect a
 previous run. Use `python -m autoresearch_harness resume --research-id <id>` to
@@ -160,11 +170,11 @@ Decision semantics are intentionally separate from effect metrics:
 - `state.json.decision_evidence` stores a compact evidence chain for the final
   decision, while `provenance.jsonl` stores the full graph
 
-Git state at the time these notes were added:
+Current Git state:
 
-- local git repository exists
-- initial commit exists: `9afc4e6 Initial autoresearch harness MVP`
-- GitHub remote has not been configured or pushed yet
+- local git repository exists on `main`
+- GitHub remote exists: `https://github.com/Hubert-hwk/autoresearch-harness`
+- GitHub Actions CI runs compile and unit-test validation
 
 ## Gap To Desired System
 
@@ -177,8 +187,9 @@ Missing major capabilities:
   directions from objectives, context, metrics, history, and failures
 - richer provider-specific LLM clients and prompt templates
 - richer `Hypothesis` planning with code/config/prompt mutations
-- richer `MemoryManager` retrieval over lessons, successful patterns, failure
-  patterns, bad cases, and domain notes
+- richer `MemoryManager` retrieval over successful patterns, failure patterns,
+  bad cases, domain notes, and semantic similarity beyond the current rule
+  based memory index
 - full `BranchManager` lifecycle with trial commits, diff capture, rollback,
   and optional PR creation
 - stronger `EffectEvaluator` with confidence, regressions, and statistical
@@ -188,7 +199,7 @@ Missing major capabilities:
 - stronger resume safety checks, such as command fingerprints, environment
   fingerprints, and duplicate memory-write prevention
 - real business executors instead of deterministic simulations
-- GitHub remote, CI, release discipline, and richer documentation
+- release discipline and richer documentation
 
 ## Next Engineering Milestone
 
@@ -198,15 +209,14 @@ Preferred first implementation:
 
 1. Add a real mutation interface for code/config/prompt changes.
 2. Capture diffs and optional trial commits per hypothesis.
-3. Add stronger memory retrieval that ranks relevant lessons and supporting
-   trials, not just recent JSONL records.
+3. Continue strengthening memory retrieval beyond the current lightweight
+   relevance index, especially supporting trials and failure patterns.
 4. Add one semi-real executor, such as prompt eval against a real model or a
    business offline-eval command adapter.
 5. Expand GitHub CI beyond unit tests when real executors are available.
 
-This should be implemented locally first. After the v0.2 loop is demonstrable,
-push the repository to GitHub as the first meaningful public or private remote
-baseline.
+This should be implemented incrementally, with each step validated locally and
+pushed after tests pass.
 
 ## Engineering Principles
 
