@@ -1,0 +1,40 @@
+{
+  "name": "prompt_tuning_mvp",
+  "objective": "Improve grounded answer quality while controlling hallucination and answer length.",
+  "executor": "prompt_tuning",
+  "dataset": "dataset.jsonl",
+  "budget": {
+    "max_trials": 18
+  },
+  "search_space": {
+    "style": {
+      "type": "categorical",
+      "values": ["concise", "structured", "creative"]
+    },
+    "evidence_policy": {
+      "type": "categorical",
+      "values": ["loose", "cite_context", "strict_context"]
+    },
+    "length": {
+      "type": "categorical",
+      "values": ["short", "medium", "long"]
+    }
+  },
+  "metrics": {
+    "primary": {
+      "name": "accuracy",
+      "direction": "maximize"
+    },
+    "guardrails": [
+      {
+        "name": "hallucination_rate",
+        "max": 0.0
+      },
+      {
+        "name": "avg_tokens",
+        "max": 9
+      }
+    ]
+  }
+}
+

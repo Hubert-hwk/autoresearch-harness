@@ -1,0 +1,53 @@
+{
+  "name": "ranking_param_tuning_mvp",
+  "objective": "Improve search ranking relevance while keeping latency under control.",
+  "executor": "ranking_param_tuning",
+  "dataset": "dataset.jsonl",
+  "budget": {
+    "max_trials": 30
+  },
+  "search_space": {
+    "relevance_weight": {
+      "type": "float",
+      "min": 0.8,
+      "max": 1.6,
+      "steps": 3
+    },
+    "ctr_weight": {
+      "type": "float",
+      "min": 0.3,
+      "max": 1.1,
+      "steps": 3
+    },
+    "bid_weight": {
+      "type": "float",
+      "min": 0.0,
+      "max": 0.4,
+      "steps": 2
+    },
+    "freshness_weight": {
+      "type": "categorical",
+      "values": [0.0, 0.2]
+    },
+    "latency_penalty": {
+      "type": "categorical",
+      "values": [0.0, 0.2]
+    }
+  },
+  "metrics": {
+    "primary": {
+      "name": "ndcg_at_3",
+      "direction": "maximize"
+    },
+    "guardrails": [
+      {
+        "name": "latency_p95_ms",
+        "max": 100
+      },
+      {
+        "name": "revenue",
+        "min": 0.5
+      }
+    ]
+  }
+}
