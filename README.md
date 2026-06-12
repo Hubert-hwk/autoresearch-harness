@@ -27,6 +27,12 @@ Run the broader MVP validation suite with:
 .\scripts\run-validation.ps1
 ```
 
+Run the first agentic research loop with:
+
+```powershell
+python -m autoresearch_harness research examples\prompt_tuning\task.json --branch-mode record
+```
+
 If the package is installed in your project virtual environment, the same demo
 can also be launched with:
 
@@ -42,6 +48,16 @@ The command writes artifacts under `runs/<run_id>/`:
 - `decisions.jsonl`: harness decisions and stop reason
 - `report.md`: compact human-readable summary
 
+The `research` command creates a higher-level `runs/agentic_<timestamp>/`
+directory containing:
+
+- baseline and candidate run artifacts
+- `hypothesis.json`: agent-proposed optimization direction
+- `branch.json`: experiment branch metadata
+- `effect.json`: baseline-vs-candidate comparison
+- `agentic_result.json`: complete loop summary
+- `report.md`: human-readable agentic run report
+
 ## MVP Scope
 
 The included adapters are:
@@ -51,6 +67,10 @@ The included adapters are:
 
 Together they demonstrate that the harness protocol is not tied to one
 business scenario.
+
+The first agentic loop is deterministic: a rule-based research agent reads
+baseline failure reasons, proposes a focused hypothesis, validates it, compares
+effects, and writes memory records under `memory/`.
 
 The intended extension points are:
 

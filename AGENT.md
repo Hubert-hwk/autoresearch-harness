@@ -58,7 +58,7 @@ The harness should eventually support:
 
 ## Current MVP State
 
-The current implementation proves the smallest reusable protocol:
+The initial implementation proves the smallest reusable protocol:
 
 ```text
 TaskSpec -> Trial -> Executor -> Metrics -> Guardrails -> Analysis -> Report
@@ -82,6 +82,39 @@ Validation assets:
 - `tests/test_mvp.py`
 - examples for `ranking_param_tuning` and `prompt_tuning`
 
+## Current Agentic Loop State
+
+The project now includes a deterministic `v0.2` agentic research loop:
+
+```text
+TaskSpec
+  -> baseline run
+  -> analysis.json
+  -> RuleBasedResearchAgent proposes Hypothesis
+  -> BranchManager records experiment branch metadata
+  -> focused candidate run
+  -> EffectEvaluator compares baseline and candidate
+  -> MemoryManager writes hypotheses, decisions, and lessons
+```
+
+Implemented modules:
+
+- `hypothesis.py`: first-class `Hypothesis` and `TrialPlan`
+- `agent.py`: deterministic rule-based research planner
+- `branching.py`: branch metadata recording and optional branch creation
+- `effect.py`: baseline-vs-candidate comparison
+- `memory.py`: JSONL-backed memory streams
+- `agentic.py`: orchestration for the agentic research loop
+
+Validation command:
+
+```powershell
+python -m autoresearch_harness research examples\prompt_tuning\task.json --branch-mode record
+```
+
+The loop currently uses `record` branch mode in validation, so it records the
+experiment branch identity without switching the active worktree branch.
+
 Git state at the time these notes were added:
 
 - local git repository exists
@@ -95,16 +128,15 @@ agentic AutoResearch harness.
 
 Missing major capabilities:
 
-- `ResearchAgent`: proposes optimization directions from objectives, context,
-  metrics, history, and failures
-- `Hypothesis`: first-class object containing rationale, expected effect,
-  risk, validation plan, and generated trial plan
-- `MemoryManager`: durable lessons, successful patterns, failure patterns,
-  bad cases, and domain notes
-- `BranchManager`: git branch, base commit, diff, trial commit, and rollback
-  tracking
-- `EffectEvaluator`: baseline-vs-candidate comparison, deltas, confidence,
-  regressions, and recommendation
+- LLM-backed or model-backed `ResearchAgent` that proposes optimization
+  directions from objectives, context, metrics, history, and failures
+- richer `Hypothesis` planning with code/config/prompt mutations
+- richer `MemoryManager` retrieval over lessons, successful patterns, failure
+  patterns, bad cases, and domain notes
+- full `BranchManager` lifecycle with trial commits, diff capture, rollback,
+  and optional PR creation
+- stronger `EffectEvaluator` with confidence, regressions, and statistical
+  comparison
 - `DecisionEngine`: accept, reject, retry, mutate, expand search, or stop
 - `RunRegistry`: multi-run comparison, resume, replay, and run lineage
 - real business executors instead of deterministic simulations
@@ -112,19 +144,16 @@ Missing major capabilities:
 
 ## Next Engineering Milestone
 
-Build `v0.2 agentic research loop`.
+Build `v0.3 applied research integration`.
 
 Preferred first implementation:
 
-1. Add `Hypothesis` and `TrialPlan` data structures.
-2. Add a rule-based `ResearchAgent` that reads prior `analysis.json` and
-   proposes next optimization directions.
-3. Add a `MemoryManager` backed by JSONL files under `memory/`.
-4. Add a `BranchManager` that can create experiment branches and record base
-   commit and diff metadata.
-5. Add baseline-vs-candidate evaluation summaries.
-6. Add a new validation script proving:
-   objective -> hypothesis -> trial -> evaluation -> decision -> memory update.
+1. Add a real mutation interface for code/config/prompt changes.
+2. Capture diffs and optional trial commits per hypothesis.
+3. Add a retrievable memory read path that influences new hypotheses.
+4. Add one semi-real executor, such as prompt eval against a real model or a
+   business offline-eval command adapter.
+5. Add GitHub CI and push the repository to a remote baseline.
 
 This should be implemented locally first. After the v0.2 loop is demonstrable,
 push the repository to GitHub as the first meaningful public or private remote
@@ -139,4 +168,3 @@ baseline.
 - Prefer a working deterministic loop before adding LLM calls.
 - Make artifacts readable and replayable before building UI or dashboards.
 - Do not let the project regress into a simple parameter sweep tool.
-

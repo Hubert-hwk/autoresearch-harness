@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from autoresearch_harness.agentic import run_agentic_research
 from autoresearch_harness.policy import generate_trials
 from autoresearch_harness.runner import run_task
 from autoresearch_harness.spec import load_task
@@ -34,7 +35,25 @@ class MvpHarnessTest(unittest.TestCase):
         self.assertLess(analysis["pass_rate"], 1)
         self.assertTrue(analysis["failure_reasons"])
 
+    def test_agentic_research_records_hypothesis_effect_and_memory(self) -> None:
+        task = load_task(ROOT / "examples" / "prompt_tuning" / "task.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = run_agentic_research(
+                task=task,
+                runs_dir=root / "runs",
+                repo_root=ROOT,
+                memory_dir=root / "memory",
+                branch_mode="record",
+            )
+            research_dir = Path(result["paths"]["research_dir"])
+
+            self.assertTrue((research_dir / "hypothesis.json").exists())
+            self.assertTrue((research_dir / "effect.json").exists())
+            self.assertTrue((root / "memory" / "lessons.jsonl").exists())
+            self.assertEqual("accept", result["effect"]["recommendation"])
+            self.assertEqual("record", result["branch"]["mode"])
+
 
 if __name__ == "__main__":
     unittest.main()
-
