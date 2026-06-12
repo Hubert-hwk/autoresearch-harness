@@ -93,6 +93,7 @@ directory containing:
 - `hypothesis.json`: agent-proposed optimization direction
 - `branch.json`: experiment branch metadata
 - `effect.json`: baseline-vs-candidate comparison
+- `decision.json`: accept/reject/retry/needs_review decision and next action
 - `agentic_result.json`: complete loop summary
 - `report.md`: human-readable agentic run report
 
@@ -123,6 +124,12 @@ system can recover which phase completed, which run ids were produced, and
 which artifacts contain the evidence trail.
 The `resume` command can continue from completed baseline, hypothesis, branch,
 or candidate phases without rerunning earlier completed phases.
+
+Agentic runs separate metric comparison from governance decisions:
+
+- `effect.json` records metric deltas and pass-rate deltas
+- `decision.json` records the harness decision, confidence, reasons,
+  blocking guardrails, and next action
 
 The intended extension points are:
 

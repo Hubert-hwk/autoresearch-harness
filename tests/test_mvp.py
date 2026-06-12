@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from autoresearch_harness.agent import LLMResearchAgent
 from autoresearch_harness.agentic import resume_agentic_research, run_agentic_research
+from autoresearch_harness.decision import make_decision
 from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.policy import generate_trials
@@ -57,11 +58,12 @@ class MvpHarnessTest(unittest.TestCase):
 
             self.assertTrue((research_dir / "hypothesis.json").exists())
             self.assertTrue((research_dir / "effect.json").exists())
+            self.assertTrue((research_dir / "decision.json").exists())
             self.assertTrue((research_dir / "state.json").exists())
             self.assertTrue((research_dir / "events.jsonl").exists())
             self.assertTrue((research_dir / "artifacts.jsonl").exists())
             self.assertTrue((root / "memory" / "lessons.jsonl").exists())
-            self.assertEqual("accept", result["effect"]["recommendation"])
+            self.assertEqual("accept", result["decision"]["decision"])
             self.assertEqual("record", result["branch"]["mode"])
 
             status = load_research_status(root / "runs", result["research_id"])
@@ -92,7 +94,7 @@ class MvpHarnessTest(unittest.TestCase):
             hypothesis = result["hypothesis"]
             self.assertIn("stable cost-aware", hypothesis["title"])
             self.assertEqual([0.0, 0.2, 0.4], hypothesis["search_space"]["temperature"]["values"])
-            self.assertEqual("accept", result["effect"]["recommendation"])
+            self.assertEqual("accept", result["decision"]["decision"])
 
     def test_llm_agent_validates_search_space(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
@@ -151,6 +153,29 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertEqual("completed", status["state"]["status"])
             self.assertEqual(baseline_summary.run_id, result["baseline_run_id"])
             self.assertTrue((research_dir / "agentic_result.json").exists())
+
+    def test_decision_engine_flags_guardrail_tradeoff_for_review(self) -> None:
+        task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
+        decision = make_decision(
+            task,
+            baseline_analysis={"pass_rate": 0.8, "failure_reasons": {"latency_ms": 2}},
+            candidate_analysis={"pass_rate": 0.6, "failure_reasons": {"latency_ms": 3}},
+            effect={"primary_delta": 0.05, "pass_rate_delta": -0.2},
+        )
+
+        self.assertEqual("needs_review", decision.decision)
+        self.assertIn("human_review", decision.next_action)
+
+    def test_decision_engine_rejects_primary_regression(self) -> None:
+        task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
+        decision = make_decision(
+            task,
+            baseline_analysis={"pass_rate": 0.8, "failure_reasons": {}},
+            candidate_analysis={"pass_rate": 0.8, "failure_reasons": {}},
+            effect={"primary_delta": -0.01, "pass_rate_delta": 0.0},
+        )
+
+        self.assertEqual("reject", decision.decision)
 
 
 class FakeLLMClient:

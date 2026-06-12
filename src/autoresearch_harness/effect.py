@@ -16,8 +16,6 @@ def compare_runs(task: TaskSpec, baseline: dict[str, Any], candidate: dict[str, 
             delta = -delta
 
     pass_rate_delta = candidate.get("pass_rate", 0.0) - baseline.get("pass_rate", 0.0)
-    accepted = delta is not None and delta >= 0 and pass_rate_delta >= 0
-
     return {
         "primary_metric": metric,
         "baseline_best": baseline_best,
@@ -26,8 +24,6 @@ def compare_runs(task: TaskSpec, baseline: dict[str, Any], candidate: dict[str, 
         "baseline_pass_rate": baseline.get("pass_rate", 0.0),
         "candidate_pass_rate": candidate.get("pass_rate", 0.0),
         "pass_rate_delta": pass_rate_delta,
-        "recommendation": "accept" if accepted else "reject",
-        "reason": _reason(delta, pass_rate_delta),
     }
 
 
@@ -37,13 +33,4 @@ def _best_primary(analysis: dict[str, Any]) -> float | None:
         return None
     return float(top_trials[0]["primary_metric"])
 
-
-def _reason(delta: float | None, pass_rate_delta: float) -> str:
-    if delta is None:
-        return "No guardrail-passing candidate was available for comparison."
-    if delta < 0:
-        return "Candidate reduced the primary metric."
-    if pass_rate_delta < 0:
-        return "Candidate reduced guardrail pass rate."
-    return "Candidate preserved or improved primary metric and guardrail pass rate."
 

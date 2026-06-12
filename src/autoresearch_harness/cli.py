@@ -64,12 +64,12 @@ def main(argv: list[str] | None = None) -> int:
             branch_mode=args.branch_mode,
             agent_kind=args.agent,
         )
-        effect = result["effect"]
+        decision = result.get("decision", {})
         print(f"research_id={result['research_id']}")
         print(f"hypothesis={result['hypothesis']['title']}")
         print(f"branch={result['branch']['experiment_branch']}")
-        print(f"recommendation={effect['recommendation']}")
-        print(f"reason={effect['reason']}")
+        print(f"recommendation={decision.get('decision', result.get('effect', {}).get('recommendation'))}")
+        print(f"reason={'; '.join(decision.get('reasons', []))}")
         return 0
 
     if args.command == "status":
@@ -96,10 +96,10 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=args.repo_root.resolve(),
             memory_dir=args.memory_dir,
         )
-        effect = result["effect"]
+        decision = result.get("decision", {})
         print(f"research_id={result['research_id']}")
-        print(f"recommendation={effect['recommendation']}")
-        print(f"reason={effect['reason']}")
+        print(f"recommendation={decision.get('decision', result.get('effect', {}).get('recommendation'))}")
+        print(f"reason={'; '.join(decision.get('reasons', []))}")
         return 0
 
     return 1

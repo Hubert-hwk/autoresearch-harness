@@ -105,6 +105,7 @@ Implemented modules:
 - `agent.py`: deterministic rule-based research planner
 - `branching.py`: branch metadata recording and optional branch creation
 - `effect.py`: baseline-vs-candidate comparison
+- `decision.py`: harness decision engine for accept/reject/retry/needs_review
 - `memory.py`: JSONL-backed memory streams
 - `agentic.py`: orchestration for the agentic research loop
 - `llm.py`: provider-agnostic LLM client interface and OpenAI-compatible client
@@ -141,12 +142,18 @@ Agentic runs now write:
 - `state.json`: current status, phase, run ids, recommendation, and task snapshot
 - `events.jsonl`: ordered lifecycle events for interruption recovery
 - `artifacts.jsonl`: evidence index pointing at task, trials, analysis, reports,
-  hypothesis, branch metadata, effect, and final result
+  hypothesis, branch metadata, effect, decision, and final result
 
 Use `python -m autoresearch_harness status --research-id <id>` to inspect a
 previous run. Use `python -m autoresearch_harness resume --research-id <id>` to
 continue from the last completed phase. The current resume implementation can
 reuse completed baseline, hypothesis, branch, and candidate artifacts.
+
+Decision semantics are intentionally separate from effect metrics:
+
+- `effect.json` stores metric comparison only
+- `decision.json` stores the harness recommendation, confidence, reasons,
+  blocking guardrails, and next action
 
 Git state at the time these notes were added:
 

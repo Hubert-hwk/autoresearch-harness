@@ -8,6 +8,7 @@ from typing import Any
 
 from .agent import LLMResearchAgent, RuleBasedResearchAgent
 from .branching import BranchManager, BranchRecord, branch_record_to_dict
+from .decision import decision_to_dict, make_decision
 from .effect import compare_runs
 from .hypothesis import Hypothesis
 from .llm import OpenAICompatibleClient
@@ -264,6 +265,7 @@ def _finalize_research(
     agent_kind: str,
 ) -> dict[str, Any]:
     effect = compare_runs(task, baseline_analysis, candidate_analysis)
+    decision = decision_to_dict(make_decision(task, baseline_analysis, candidate_analysis, effect))
     research_id = _read_state(research_dir)["research_id"]
     memory = MemoryManager(memory_dir)
     memory.record_hypothesis(hypothesis)
@@ -272,10 +274,11 @@ def _finalize_research(
             "research_id": research_id,
             "hypothesis_id": hypothesis.id,
             "effect": effect,
+            "decision": decision,
             "branch": branch,
         }
     )
-    memory.record_lesson(_lesson(research_id, hypothesis.id, effect))
+    memory.record_lesson(_lesson(research_id, hypothesis.id, effect, decision))
 
     result = {
         "research_id": research_id,
@@ -285,6 +288,7 @@ def _finalize_research(
         "branch": branch,
         "agent_kind": agent_kind,
         "effect": effect,
+        "decision": decision,
         "paths": {
             "research_dir": str(research_dir),
             "memory_dir": str(memory_dir),
@@ -292,6 +296,8 @@ def _finalize_research(
     }
     _write_json(research_dir / "effect.json", result["effect"])
     registry.artifact("effect", research_dir / "effect.json", "Baseline-vs-candidate effect comparison")
+    _write_json(research_dir / "decision.json", result["decision"])
+    registry.artifact("decision", research_dir / "decision.json", "Harness decision and next action")
     _write_json(research_dir / "agentic_result.json", result)
     registry.artifact("result", research_dir / "agentic_result.json", "Complete agentic research result")
     _write_report(research_dir / "report.md", result)
@@ -299,10 +305,11 @@ def _finalize_research(
     registry.state(
         status="completed",
         phase="completed",
-        recommendation=effect["recommendation"],
-        reason=effect["reason"],
+        recommendation=decision["decision"],
+        reason="; ".join(decision["reasons"]),
+        decision=decision,
     )
-    registry.event("research_completed", {"recommendation": effect["recommendation"]})
+    registry.event("research_completed", {"recommendation": decision["decision"]})
     return result
 
 
@@ -407,13 +414,19 @@ def _read_analysis(parent: Path, summary: RunSummary) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _lesson(research_id: str, hypothesis_id: str, effect: dict[str, Any]) -> dict[str, Any]:
+def _lesson(
+    research_id: str,
+    hypothesis_id: str,
+    effect: dict[str, Any],
+    decision: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "research_id": research_id,
         "hypothesis_id": hypothesis_id,
-        "lesson": effect["reason"],
-        "recommendation": effect["recommendation"],
+        "lesson": "; ".join(decision["reasons"]),
+        "recommendation": decision["decision"],
         "supporting_effect": effect,
+        "supporting_decision": decision,
     }
 
 
@@ -423,6 +436,7 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 
 def _write_report(path: Path, result: dict[str, Any]) -> None:
     effect = result["effect"]
+    decision = result["decision"]
     lines = [
         f"# Agentic AutoResearch Run: {result['research_id']}",
         "",
@@ -430,13 +444,21 @@ def _write_report(path: Path, result: dict[str, Any]) -> None:
         f"- Branch mode: `{result['branch']['mode']}`",
         f"- Agent: `{result['agent_kind']}`",
         f"- Experiment branch: `{result['branch']['experiment_branch']}`",
-        f"- Recommendation: `{effect['recommendation']}`",
-        f"- Reason: {effect['reason']}",
+        f"- Decision: `{decision['decision']}`",
+        f"- Confidence: `{decision['confidence']:.2f}`",
+        f"- Next action: `{decision['next_action']}`",
+        f"- Reason: {'; '.join(decision['reasons'])}",
         "",
         "## Effect",
         "",
         "```json",
         json.dumps(effect, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## Decision",
+        "",
+        "```json",
+        json.dumps(decision, ensure_ascii=False, indent=2),
         "```",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
