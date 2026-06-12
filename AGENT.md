@@ -36,6 +36,7 @@ Objective / Business Goal
   -> Agent Research Planner
   -> Hypothesis / Trial Planner
   -> Branch / Workspace Manager
+  -> Branch Lifecycle
   -> Mutation Protocol
   -> Trial Executor
   -> Effect Evaluator
@@ -104,7 +105,8 @@ Implemented modules:
 
 - `hypothesis.py`: first-class `Hypothesis` and `TrialPlan`
 - `agent.py`: deterministic rule-based research planner
-- `branching.py`: branch metadata recording and optional branch creation
+- `branching.py`: branch metadata, lifecycle tracking, and optional branch
+  creation
 - `effect.py`: baseline-vs-candidate comparison
 - `decision.py`: harness decision engine for accept/reject/retry/needs_review
 - `memory.py`: JSONL-backed memory streams
@@ -150,6 +152,7 @@ Agentic runs now write:
 - `provenance.jsonl`: dependency graph connecting decision evidence back to
   hypothesis, effect, baseline/candidate analysis, and trial artifacts
 - `memory_context.json`: ranked prior lessons selected for the hypothesis step
+- `branch_lifecycle.json`: experiment branch phase and disposition record
 - `mutation_plan.json`: validated mutation manifest applied before candidate
   execution
 
@@ -168,6 +171,13 @@ operations, and derives the candidate task from that manifest. This gives the
 system a stable place to later add prompt patches, config patches, code diffs,
 and branch commits without letting free-form agent output directly mutate the
 workspace.
+
+Branch lifecycle is now explicit but still conservative. `branch.json` records
+base branch, base commit, experiment branch, mode, and whether a branch was
+created. `branch_lifecycle.json` records `branch_prepared`,
+`mutation_attached`, `candidate_executed`, and `decision_recorded`, then assigns
+a disposition such as `record_only`, `retain_for_promotion`,
+`retain_for_review`, `retain_for_retry`, or `retain_for_audit`.
 
 Use `python -m autoresearch_harness status --research-id <id>` to inspect a
 previous run. Use `python -m autoresearch_harness resume --research-id <id>` to
@@ -203,8 +213,8 @@ Missing major capabilities:
 - richer `MemoryManager` retrieval over successful patterns, failure patterns,
   bad cases, domain notes, and semantic similarity beyond the current rule
   based memory index
-- full `BranchManager` lifecycle with trial commits, diff capture, rollback,
-  and optional PR creation
+- full branch lifecycle with trial commits, diff capture, rollback, remote
+  branch push, and optional PR creation
 - stronger `EffectEvaluator` with confidence, regressions, and statistical
   comparison
 - `DecisionEngine`: accept, reject, retry, mutate, expand search, or stop

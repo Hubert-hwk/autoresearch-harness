@@ -11,6 +11,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from autoresearch_harness.agent import LLMResearchAgent
 from autoresearch_harness.agentic import resume_agentic_research, run_agentic_research
+from autoresearch_harness.branching import BranchRecord
+from autoresearch_harness.branching import advance_branch_lifecycle
+from autoresearch_harness.branching import complete_branch_lifecycle
+from autoresearch_harness.branching import start_branch_lifecycle
 from autoresearch_harness.decision import make_decision
 from autoresearch_harness.hypothesis import Hypothesis
 from autoresearch_harness.llm import LLMMessage
@@ -61,6 +65,7 @@ class MvpHarnessTest(unittest.TestCase):
             research_dir = Path(result["paths"]["research_dir"])
 
             self.assertTrue((research_dir / "hypothesis.json").exists())
+            self.assertTrue((research_dir / "branch_lifecycle.json").exists())
             self.assertTrue((research_dir / "mutation_plan.json").exists())
             self.assertTrue((research_dir / "effect.json").exists())
             self.assertTrue((research_dir / "decision.json").exists())
@@ -70,6 +75,15 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertTrue((root / "memory" / "lessons.jsonl").exists())
             self.assertEqual("accept", result["decision"]["decision"])
             self.assertEqual("record", result["branch"]["mode"])
+            self.assertEqual("completed", result["branch_lifecycle"]["status"])
+            self.assertEqual("record_only", result["branch_lifecycle"]["disposition"])
+            lifecycle_events = {
+                event["name"] for event in result["branch_lifecycle"]["events"]
+            }
+            self.assertIn("branch_prepared", lifecycle_events)
+            self.assertIn("mutation_attached", lifecycle_events)
+            self.assertIn("candidate_executed", lifecycle_events)
+            self.assertIn("decision_recorded", lifecycle_events)
 
             status = load_research_status(root / "runs", result["research_id"])
             self.assertEqual("completed", status["state"]["status"])
@@ -82,6 +96,7 @@ class MvpHarnessTest(unittest.TestCase):
                 record["artifact_id"] for record in evidence_for(status["provenance"], "decision")
             }
             self.assertIn("effect", evidence_ids)
+            self.assertIn("branch_lifecycle", evidence_ids)
             self.assertIn("mutation_plan", evidence_ids)
             self.assertIn("baseline_analysis", evidence_ids)
             self.assertIn("candidate_analysis", evidence_ids)
@@ -111,8 +126,10 @@ class MvpHarnessTest(unittest.TestCase):
             provenance_ids = {record["artifact_id"] for record in status["provenance"]}
 
             self.assertTrue((research_dir / "memory_context.json").exists())
+            self.assertTrue((research_dir / "branch_lifecycle.json").exists())
             self.assertTrue((research_dir / "mutation_plan.json").exists())
             self.assertIn("memory_context", provenance_ids)
+            self.assertIn("branch_lifecycle", provenance_ids)
             self.assertIn("mutation_plan", provenance_ids)
             self.assertTrue(status["state"]["memory_context"]["matches"])
             self.assertIn("stable cost-aware", hypothesis["title"])
@@ -149,6 +166,25 @@ class MvpHarnessTest(unittest.TestCase):
         self.assertNotIn("unknown_param", plan.candidate_search_space)
         self.assertEqual(plan.candidate_budget, candidate_task.budget.max_trials)
         self.assertTrue(plan.operations)
+
+    def test_branch_lifecycle_tracks_disposition_and_idempotent_events(self) -> None:
+        record = BranchRecord(
+            mode="create",
+            base_branch="main",
+            base_commit="abc123",
+            experiment_branch="autoresearch/hyp",
+            created=True,
+        )
+
+        lifecycle = start_branch_lifecycle("hyp", record)
+        lifecycle = advance_branch_lifecycle(lifecycle, "mutation_attached", "mutation_attached")
+        lifecycle = advance_branch_lifecycle(lifecycle, "mutation_attached", "mutation_attached")
+        lifecycle = complete_branch_lifecycle(lifecycle, "accept")
+
+        event_names = [event.name for event in lifecycle.events]
+        self.assertEqual(1, event_names.count("mutation_attached"))
+        self.assertEqual("completed", lifecycle.status)
+        self.assertEqual("retain_for_promotion", lifecycle.disposition)
 
     def test_memory_index_ranks_relevant_lessons(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
@@ -238,8 +274,10 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertEqual("completed", status["state"]["status"])
             self.assertEqual(baseline_summary.run_id, result["baseline_run_id"])
             self.assertTrue((research_dir / "agentic_result.json").exists())
+            self.assertTrue((research_dir / "branch_lifecycle.json").exists())
             provenance_ids = {record["artifact_id"] for record in status["provenance"]}
             self.assertIn("baseline_analysis", provenance_ids)
+            self.assertIn("branch_lifecycle", provenance_ids)
             self.assertIn("decision", provenance_ids)
 
     def test_memory_records_are_idempotent(self) -> None:

@@ -93,6 +93,7 @@ directory containing:
 - `provenance.jsonl`: evidence graph linking decisions to supporting artifacts
 - `memory_context.json`: ranked prior lessons used by the agent planner
 - `hypothesis.json`: agent-proposed optimization direction
+- `branch_lifecycle.json`: experiment branch phase and disposition record
 - `mutation_plan.json`: validated mutation protocol manifest derived from the
   hypothesis
 - `branch.json`: experiment branch metadata
@@ -142,13 +143,21 @@ values within the original task bounds, but it cannot introduce unknown
 parameters or out-of-contract values. The candidate run is derived from this
 manifest rather than directly from free-form agent output.
 
+Branch lifecycle is tracked separately from branch metadata. `branch.json`
+records the base and experiment branch identity; `branch_lifecycle.json`
+records the phases the experiment branch has passed through, including mutation
+attachment, candidate execution, final decision, and branch disposition. In
+`record` mode the disposition is `record_only`; in real branch mode, accepted
+experiments are retained for promotion while rejected or retry-worthy branches
+remain available for audit or follow-up.
+
 Agentic runs separate metric comparison from governance decisions:
 
 - `effect.json` records metric deltas and pass-rate deltas
 - `decision.json` records the harness decision, confidence, reasons,
   blocking guardrails, and next action
 - `provenance.jsonl` records dependencies such as
-  `decision -> effect -> candidate analysis -> mutation plan -> hypothesis`
+  `decision -> effect -> candidate analysis -> mutation plan -> branch lifecycle`
 
 The intended extension points are:
 

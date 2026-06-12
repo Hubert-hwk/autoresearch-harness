@@ -7,7 +7,17 @@ from pathlib import Path
 from typing import Any
 
 from .agent import LLMResearchAgent, RuleBasedResearchAgent
-from .branching import BranchManager, BranchRecord, branch_record_to_dict
+from .branching import (
+    BranchLifecycle,
+    BranchManager,
+    BranchRecord,
+    advance_branch_lifecycle,
+    branch_lifecycle_from_dict,
+    branch_lifecycle_to_dict,
+    branch_record_to_dict,
+    complete_branch_lifecycle,
+    start_branch_lifecycle,
+)
 from .decision import decision_to_dict, make_decision
 from .effect import compare_runs
 from .hypothesis import Hypothesis
@@ -133,6 +143,14 @@ def _continue_agentic_research(
         state=state,
     )
     state = _read_state(research_dir)
+    branch_lifecycle = _ensure_branch_lifecycle(
+        hypothesis=hypothesis,
+        branch_record=branch_record,
+        research_dir=research_dir,
+        registry=registry,
+        state=state,
+    )
+    state = _read_state(research_dir)
     mutation_plan = _ensure_mutation_plan(
         task=task,
         hypothesis=hypothesis,
@@ -140,9 +158,28 @@ def _continue_agentic_research(
         registry=registry,
         state=state,
     )
+    branch_lifecycle = _advance_branch_lifecycle(
+        branch_lifecycle,
+        research_dir,
+        registry,
+        event_name="mutation_attached",
+        status="mutation_attached",
+        metadata={
+            "operation_count": len(mutation_plan.operations),
+            "candidate_budget": mutation_plan.candidate_budget,
+        },
+    )
 
     state = _read_state(research_dir)
     candidate_summary = _ensure_candidate(task, mutation_plan, research_dir, registry, state)
+    branch_lifecycle = _advance_branch_lifecycle(
+        branch_lifecycle,
+        research_dir,
+        registry,
+        event_name="candidate_executed",
+        status="candidate_executed",
+        metadata={"candidate_run_id": candidate_summary.run_id},
+    )
     candidate_analysis = _read_analysis(research_dir / "candidate", candidate_summary)
 
     return _finalize_research(
@@ -156,6 +193,7 @@ def _continue_agentic_research(
         candidate_analysis=candidate_analysis,
         hypothesis=hypothesis,
         mutation_plan=mutation_plan,
+        branch_lifecycle=branch_lifecycle,
         branch=branch_record_to_dict(branch_record),
         agent_kind=agent_kind,
     )
@@ -365,8 +403,79 @@ def _register_mutation_plan(
         "mutation_plan",
         mutation_path,
         "mutation_protocol",
-        depends_on=["hypothesis", "branch"],
+        depends_on=["hypothesis", "branch", "branch_lifecycle"],
         supports=["candidate_task", "effect", "decision"],
+    )
+
+
+def _ensure_branch_lifecycle(
+    hypothesis,
+    branch_record: BranchRecord,
+    research_dir: Path,
+    registry: ResearchRegistry,
+    state: dict[str, Any],
+) -> BranchLifecycle:
+    if state.get("branch_lifecycle"):
+        lifecycle = branch_lifecycle_from_dict(state["branch_lifecycle"])
+        lifecycle_path = research_dir / "branch_lifecycle.json"
+        if not lifecycle_path.exists():
+            _write_json(lifecycle_path, state["branch_lifecycle"])
+        _register_branch_lifecycle(research_dir, registry)
+        return lifecycle
+
+    lifecycle = start_branch_lifecycle(hypothesis.id, branch_record)
+    _write_branch_lifecycle(research_dir, registry, lifecycle)
+    registry.event(
+        "branch_lifecycle_started",
+        {
+            "hypothesis_id": hypothesis.id,
+            "experiment_branch": branch_record.experiment_branch,
+            "mode": branch_record.mode,
+        },
+    )
+    return lifecycle
+
+
+def _advance_branch_lifecycle(
+    lifecycle: BranchLifecycle,
+    research_dir: Path,
+    registry: ResearchRegistry,
+    event_name: str,
+    status: str,
+    metadata: dict[str, Any],
+) -> BranchLifecycle:
+    existing_events = {event.name for event in lifecycle.events}
+    updated = advance_branch_lifecycle(lifecycle, event_name, status, metadata)
+    _write_branch_lifecycle(research_dir, registry, updated)
+    if event_name not in existing_events:
+        registry.event(event_name, metadata)
+    return updated
+
+
+def _write_branch_lifecycle(
+    research_dir: Path,
+    registry: ResearchRegistry,
+    lifecycle: BranchLifecycle,
+) -> None:
+    lifecycle_dict = branch_lifecycle_to_dict(lifecycle)
+    _write_json(research_dir / "branch_lifecycle.json", lifecycle_dict)
+    registry.state(branch_lifecycle=lifecycle_dict)
+    _register_branch_lifecycle(research_dir, registry)
+
+
+def _register_branch_lifecycle(
+    research_dir: Path,
+    registry: ResearchRegistry,
+) -> None:
+    lifecycle_path = research_dir / "branch_lifecycle.json"
+    registry.artifact("branch_lifecycle", lifecycle_path, "Experiment branch lifecycle manifest")
+    ProvenanceRecorder(research_dir).record(
+        "branch_lifecycle",
+        "branch_lifecycle",
+        lifecycle_path,
+        "branch_lifecycle_manager",
+        depends_on=["branch", "hypothesis"],
+        supports=["mutation_plan", "candidate_task", "decision", "agentic_result"],
     )
 
 
@@ -412,11 +521,14 @@ def _finalize_research(
     candidate_analysis: dict[str, Any],
     hypothesis,
     mutation_plan: MutationPlan,
+    branch_lifecycle: BranchLifecycle,
     branch: dict[str, Any],
     agent_kind: str,
 ) -> dict[str, Any]:
     effect = compare_runs(task, baseline_analysis, candidate_analysis)
     decision = decision_to_dict(make_decision(task, baseline_analysis, candidate_analysis, effect))
+    branch_lifecycle = complete_branch_lifecycle(branch_lifecycle, decision["decision"])
+    _write_branch_lifecycle(research_dir, registry, branch_lifecycle)
     research_id = _read_state(research_dir)["research_id"]
     memory = MemoryManager(memory_dir)
     memory.record_hypothesis(hypothesis)
@@ -427,6 +539,7 @@ def _finalize_research(
             "effect": effect,
             "decision": decision,
             "branch": branch,
+            "branch_lifecycle": branch_lifecycle_to_dict(branch_lifecycle),
         }
     )
     memory.record_lesson(_lesson(research_id, hypothesis.id, effect, decision))
@@ -438,6 +551,7 @@ def _finalize_research(
         "hypothesis": asdict(hypothesis),
         "mutation_plan": mutation_plan_to_dict(mutation_plan),
         "branch": branch,
+        "branch_lifecycle": branch_lifecycle_to_dict(branch_lifecycle),
         "agent_kind": agent_kind,
         "effect": effect,
         "decision": decision,
@@ -471,6 +585,7 @@ def _finalize_research(
             "hypothesis",
             "mutation_plan",
             "branch",
+            "branch_lifecycle",
         ],
         supports=["lesson", "report", "agentic_result"],
     )
@@ -482,7 +597,7 @@ def _finalize_research(
         "result",
         research_dir / "agentic_result.json",
         "agentic_runner",
-        depends_on=["decision", "effect", "hypothesis", "mutation_plan", "branch"],
+        depends_on=["decision", "effect", "hypothesis", "mutation_plan", "branch", "branch_lifecycle"],
         supports=["report"],
     )
     _write_report(research_dir / "report.md", result)
@@ -500,6 +615,7 @@ def _finalize_research(
         recommendation=decision["decision"],
         reason="; ".join(decision["reasons"]),
         decision=decision,
+        branch_lifecycle=branch_lifecycle_to_dict(branch_lifecycle),
         decision_evidence=[
             {
                 "artifact_id": record["artifact_id"],
@@ -637,6 +753,7 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 def _write_report(path: Path, result: dict[str, Any]) -> None:
     effect = result["effect"]
     decision = result["decision"]
+    branch_lifecycle = result["branch_lifecycle"]
     lines = [
         f"# Agentic AutoResearch Run: {result['research_id']}",
         "",
@@ -646,6 +763,8 @@ def _write_report(path: Path, result: dict[str, Any]) -> None:
         f"- Branch mode: `{result['branch']['mode']}`",
         f"- Agent: `{result['agent_kind']}`",
         f"- Experiment branch: `{result['branch']['experiment_branch']}`",
+        f"- Branch lifecycle: `{branch_lifecycle['status']}`",
+        f"- Branch disposition: `{branch_lifecycle['disposition']}`",
         f"- Decision: `{decision['decision']}`",
         f"- Confidence: `{decision['confidence']:.2f}`",
         f"- Next action: `{decision['next_action']}`",
