@@ -150,6 +150,32 @@ class MvpHarnessTest(unittest.TestCase):
             )
             self.assertEqual("accept", result["decision"]["decision"])
 
+    def test_recommender_bpr_agentic_loop_improves_real_training_metrics(self) -> None:
+        task = load_task(ROOT / "examples" / "recommender_bpr" / "task.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = run_agentic_research(
+                task=task,
+                runs_dir=root / "runs",
+                repo_root=ROOT,
+                memory_dir=root / "memory",
+                branch_mode="record",
+            )
+            research_dir = Path(result["paths"]["research_dir"])
+            status = load_research_status(root / "runs", result["research_id"])
+
+            self.assertEqual("accept", result["decision"]["decision"])
+            self.assertGreater(result["effect"]["primary_delta"], 0.05)
+            self.assertGreater(result["effect"]["pass_rate_delta"], 0.0)
+            self.assertTrue((research_dir / "mutation_artifact" / "candidate_task.json").exists())
+            self.assertTrue((research_dir / "mutation_artifact" / "mutation.diff").exists())
+            self.assertIn(
+                "recommender_bpr_focus",
+                result["hypothesis"]["id"],
+            )
+            provenance_ids = {record["artifact_id"] for record in status["provenance"]}
+            self.assertIn("mutation_diff", provenance_ids)
+
     def test_mutation_plan_validates_search_space_subset_and_materializes_diff(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
         hypothesis = Hypothesis(

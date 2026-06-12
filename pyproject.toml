@@ -3,8 +3,9 @@ name = "autoresearch-harness"
 version = "0.1.0"
 description = "A minimal autoresearch harness for business optimization trials."
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "numpy==2.2.6",
+]
 
 [project.scripts]
 autoresearch = "autoresearch_harness.cli:main"
-

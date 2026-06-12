@@ -1,0 +1,47 @@
+{
+  "name": "recommender_bpr_mvp",
+  "objective": "Improve top-k recommendation quality with a small real BPR training loop while controlling runtime.",
+  "executor": "recommender_bpr",
+  "dataset": "interactions.csv",
+  "budget": {
+    "max_trials": 8
+  },
+  "search_space": {
+    "factors": {
+      "type": "categorical",
+      "values": [4, 8, 16]
+    },
+    "learning_rate": {
+      "type": "categorical",
+      "values": [0.03, 0.06]
+    },
+    "regularization": {
+      "type": "categorical",
+      "values": [0.001, 0.01]
+    },
+    "epochs": {
+      "type": "categorical",
+      "values": [8, 16]
+    },
+    "negative_samples": {
+      "type": "categorical",
+      "values": [1]
+    }
+  },
+  "metrics": {
+    "primary": {
+      "name": "ndcg_at_10",
+      "direction": "maximize"
+    },
+    "guardrails": [
+      {
+        "name": "hit_rate_at_10",
+        "min": 0.30
+      },
+      {
+        "name": "train_time_sec",
+        "max": 5.0
+      }
+    ]
+  }
+}

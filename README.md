@@ -39,6 +39,12 @@ Run the model-parameter tuning example with:
 python -m autoresearch_harness research examples\model_param_tuning\task.json --branch-mode record
 ```
 
+Run the NumPy BPR recommender example with:
+
+```powershell
+python -m autoresearch_harness research examples\recommender_bpr\task.json --branch-mode record
+```
+
 Inspect the latest agentic run, or a specific run, with:
 
 ```powershell
@@ -113,6 +119,8 @@ The included adapters are:
 - `ranking_param_tuning`: a local deterministic search/ranking simulation
 - `prompt_tuning`: a deterministic prompt optimization simulation
 - `model_param_tuning`: a deterministic model serving parameter simulation
+- `recommender_bpr`: a small real NumPy BPR recommender training and evaluation
+  loop
 
 Together they demonstrate that the harness protocol is not tied to one
 business scenario.

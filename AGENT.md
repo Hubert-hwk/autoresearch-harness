@@ -122,6 +122,7 @@ Supported deterministic validation scenarios:
 - search/ranking parameter tuning
 - prompt tuning
 - model serving parameter tuning
+- NumPy BPR recommender tuning with real training and top-k evaluation
 
 The `research` command supports two agent modes:
 

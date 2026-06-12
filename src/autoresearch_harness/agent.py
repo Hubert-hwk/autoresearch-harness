@@ -24,6 +24,8 @@ class RuleBasedResearchAgent:
             return self._prompt_tuning_hypothesis(task, analysis, source_run_id, memories)
         if task.executor == "model_param_tuning":
             return self._model_param_hypothesis(task, analysis, source_run_id, memories)
+        if task.executor == "recommender_bpr":
+            return self._recommender_bpr_hypothesis(task, analysis, source_run_id, memories)
         if task.executor == "ranking_param_tuning":
             return self._ranking_hypothesis(task, analysis, source_run_id, memories)
         return self._generic_hypothesis(task, analysis, source_run_id, memories)
@@ -104,6 +106,40 @@ class RuleBasedResearchAgent:
             risks=risks,
             search_space=search_space,
             validation_plan="Run focused model_param_tuning trials and compare candidate to baseline.",
+            source_run_id=source_run_id,
+        )
+
+    def _recommender_bpr_hypothesis(
+        self,
+        task: TaskSpec,
+        analysis: dict[str, Any],
+        source_run_id: str,
+        memories: list[dict[str, Any]],
+    ) -> Hypothesis:
+        search_space = deepcopy(task.search_space)
+        _filter_values(search_space, "factors", [8, 16])
+        _filter_values(search_space, "regularization", [0.001])
+        _filter_values(search_space, "epochs", [8])
+        rationale = (
+            "Baseline BPR trials underexplored larger embeddings because the budget "
+            "was exhausted on smaller factor settings. Focus candidate training on "
+            "larger latent spaces while keeping epochs and regularization controlled."
+        )
+        if _memory_mentions(memories, "train_time_sec"):
+            _filter_values(search_space, "epochs", [8])
+
+        return Hypothesis(
+            id=f"hyp_{source_run_id}_recommender_bpr_focus",
+            title="Focus BPR recommender search on larger controlled embeddings",
+            rationale=rationale,
+            expected_effects={
+                "ndcg_at_10": "improve",
+                "hit_rate_at_10": "improve or stay above guardrail",
+                "train_time_sec": "stay within guardrail",
+            },
+            risks=["Larger embeddings can overfit sparse users or increase runtime."],
+            search_space=search_space,
+            validation_plan="Run focused recommender_bpr trials and compare top-k metrics.",
             source_run_id=source_run_id,
         )
 
