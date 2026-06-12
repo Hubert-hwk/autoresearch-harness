@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from .agentic import run_agentic_research
+from .registry import load_research_status
 from .runner import run_task
 from .spec import load_task
 
@@ -23,6 +25,11 @@ def main(argv: list[str] | None = None) -> int:
     research_parser.add_argument("--repo-root", type=Path, default=Path("."))
     research_parser.add_argument("--branch-mode", choices=["record", "create"], default="record")
     research_parser.add_argument("--agent", choices=["rule", "llm"], default="rule")
+
+    status_parser = subparsers.add_parser("status", help="show a prior agentic research run")
+    status_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    status_parser.add_argument("--research-id")
+    status_parser.add_argument("--json", action="store_true")
 
     args = parser.parse_args(argv)
 
@@ -57,6 +64,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"branch={result['branch']['experiment_branch']}")
         print(f"recommendation={effect['recommendation']}")
         print(f"reason={effect['reason']}")
+        return 0
+
+    if args.command == "status":
+        status = load_research_status(args.runs_dir, args.research_id)
+        if args.json:
+            print(json.dumps(status, ensure_ascii=False, indent=2))
+        else:
+            state = status["state"]
+            print(f"research_id={status['research_id']}")
+            print(f"status={state.get('status')}")
+            print(f"phase={state.get('phase')}")
+            print(f"agent={state.get('agent_kind')}")
+            print(f"baseline_run_id={state.get('baseline_run_id')}")
+            print(f"candidate_run_id={state.get('candidate_run_id')}")
+            print(f"recommendation={state.get('recommendation')}")
+            print(f"events={len(status['events'])}")
+            print(f"artifacts={len(status['artifacts'])}")
         return 0
 
     return 1

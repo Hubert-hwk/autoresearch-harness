@@ -96,6 +96,7 @@ TaskSpec
   -> focused candidate run
   -> EffectEvaluator compares baseline and candidate
   -> MemoryManager writes hypotheses, decisions, and lessons
+  -> ResearchRegistry writes state, lifecycle events, and artifact index
 ```
 
 Implemented modules:
@@ -107,6 +108,7 @@ Implemented modules:
 - `memory.py`: JSONL-backed memory streams
 - `agentic.py`: orchestration for the agentic research loop
 - `llm.py`: provider-agnostic LLM client interface and OpenAI-compatible client
+- `registry.py`: durable state, events, and artifact index for resumability
 
 Supported deterministic validation scenarios:
 
@@ -134,6 +136,17 @@ python -m autoresearch_harness research examples\prompt_tuning\task.json --branc
 The loop currently uses `record` branch mode in validation, so it records the
 experiment branch identity without switching the active worktree branch.
 
+Agentic runs now write:
+
+- `state.json`: current status, phase, run ids, recommendation, and task snapshot
+- `events.jsonl`: ordered lifecycle events for interruption recovery
+- `artifacts.jsonl`: evidence index pointing at task, trials, analysis, reports,
+  hypothesis, branch metadata, effect, and final result
+
+Use `python -m autoresearch_harness status --research-id <id>` to inspect a
+previous run. This is the first resumability layer; future work should add
+execution resume from the last completed phase.
+
 Git state at the time these notes were added:
 
 - local git repository exists
@@ -159,6 +172,7 @@ Missing major capabilities:
   comparison
 - `DecisionEngine`: accept, reject, retry, mutate, expand search, or stop
 - `RunRegistry`: multi-run comparison, resume, replay, and run lineage
+- true resume execution from `state.json`, not just status inspection
 - real business executors instead of deterministic simulations
 - GitHub remote, CI, release discipline, and richer documentation
 

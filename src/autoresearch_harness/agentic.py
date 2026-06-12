@@ -12,7 +12,9 @@ from .effect import compare_runs
 from .llm import OpenAICompatibleClient
 from .memory import MemoryManager
 from .models import Budget, RunSummary, TaskSpec
+from .registry import ResearchRegistry
 from .runner import run_task
+from .spec import task_to_dict
 
 
 def run_agentic_research(
@@ -26,9 +28,32 @@ def run_agentic_research(
     research_id = datetime.now(timezone.utc).strftime("agentic_%Y%m%dT%H%M%S%fZ")
     research_dir = runs_dir / research_id
     research_dir.mkdir(parents=True, exist_ok=False)
+    registry = ResearchRegistry(research_dir)
+    registry.state(
+        research_id=research_id,
+        status="running",
+        phase="baseline",
+        task=task_to_dict(task),
+        agent_kind=agent_kind,
+        branch_mode=branch_mode,
+    )
+    registry.event("research_started", {"research_id": research_id, "task_name": task.name})
 
     baseline_summary = run_task(task, research_dir / "baseline")
     baseline_analysis = _read_analysis(research_dir / "baseline", baseline_summary)
+    baseline_dir = research_dir / "baseline" / baseline_summary.run_id
+    registry.state(phase="hypothesis", baseline_run_id=baseline_summary.run_id)
+    registry.event(
+        "baseline_completed",
+        {
+            "run_id": baseline_summary.run_id,
+            "total_trials": baseline_summary.total_trials,
+            "best_trial_id": baseline_summary.best_result.trial_id
+            if baseline_summary.best_result
+            else None,
+        },
+    )
+    _register_run_artifacts(registry, baseline_dir, "baseline")
 
     memory = MemoryManager(memory_dir)
     agent = _make_agent(agent_kind)
@@ -38,11 +63,28 @@ def run_agentic_research(
         baseline_summary.run_id,
         memories=memory.recent_lessons(),
     )
+    registry.state(phase="branch", hypothesis=asdict(hypothesis))
+    registry.event("hypothesis_proposed", {"hypothesis_id": hypothesis.id, "title": hypothesis.title})
     branch_record = BranchManager(repo_root).prepare(hypothesis.id, mode=branch_mode)
+    registry.state(phase="candidate", branch=branch_record_to_dict(branch_record))
+    registry.event("branch_prepared", branch_record_to_dict(branch_record))
 
     candidate_task = _candidate_task(task, hypothesis.search_space)
     candidate_summary = run_task(candidate_task, research_dir / "candidate")
     candidate_analysis = _read_analysis(research_dir / "candidate", candidate_summary)
+    candidate_dir = research_dir / "candidate" / candidate_summary.run_id
+    registry.state(phase="evaluation", candidate_run_id=candidate_summary.run_id)
+    registry.event(
+        "candidate_completed",
+        {
+            "run_id": candidate_summary.run_id,
+            "total_trials": candidate_summary.total_trials,
+            "best_trial_id": candidate_summary.best_result.trial_id
+            if candidate_summary.best_result
+            else None,
+        },
+    )
+    _register_run_artifacts(registry, candidate_dir, "candidate")
 
     effect = compare_runs(task, baseline_analysis, candidate_analysis)
     memory.record_hypothesis(hypothesis)
@@ -70,10 +112,22 @@ def run_agentic_research(
         },
     }
     _write_json(research_dir / "hypothesis.json", result["hypothesis"])
+    registry.artifact("hypothesis", research_dir / "hypothesis.json", "Agent-proposed hypothesis")
     _write_json(research_dir / "branch.json", result["branch"])
+    registry.artifact("branch", research_dir / "branch.json", "Experiment branch metadata")
     _write_json(research_dir / "effect.json", result["effect"])
+    registry.artifact("effect", research_dir / "effect.json", "Baseline-vs-candidate effect comparison")
     _write_json(research_dir / "agentic_result.json", result)
+    registry.artifact("result", research_dir / "agentic_result.json", "Complete agentic research result")
     _write_report(research_dir / "report.md", result)
+    registry.artifact("report", research_dir / "report.md", "Human-readable agentic research report")
+    registry.state(
+        status="completed",
+        phase="completed",
+        recommendation=effect["recommendation"],
+        reason=effect["reason"],
+    )
+    registry.event("research_completed", {"recommendation": effect["recommendation"]})
     return result
 
 
@@ -138,3 +192,21 @@ def _write_report(path: Path, result: dict[str, Any]) -> None:
         "```",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _register_run_artifacts(registry: ResearchRegistry, run_dir: Path, phase: str) -> None:
+    for filename, description in [
+        ("task.json", "Resolved task specification"),
+        ("trials.jsonl", "Trial-level metrics and guardrail results"),
+        ("analysis.json", "Run analysis with pass rate, failures, and top trials"),
+        ("decisions.jsonl", "Run decision events"),
+        ("report.md", "Human-readable run report"),
+    ]:
+        path = run_dir / filename
+        if path.exists():
+            registry.artifact(
+                f"{phase}_{path.stem}",
+                path,
+                f"{phase} {description}",
+                {"phase": phase, "filename": filename},
+            )

@@ -39,6 +39,14 @@ Run the model-parameter tuning example with:
 python -m autoresearch_harness research examples\model_param_tuning\task.json --branch-mode record
 ```
 
+Inspect the latest agentic run, or a specific run, with:
+
+```powershell
+.\scripts\autoresearch.ps1 status
+.\scripts\autoresearch.ps1 status --research-id agentic_...
+.\scripts\autoresearch.ps1 status --research-id agentic_... --json
+```
+
 Use a model-backed research planner with an OpenAI-compatible API:
 
 ```powershell
@@ -54,6 +62,13 @@ can also be launched with:
 python -m autoresearch_harness run examples\ranking_param_tuning\task.json
 ```
 
+For local development without installing the package, prefer the wrapper:
+
+```powershell
+.\scripts\autoresearch.ps1 run examples\ranking_param_tuning\task.json
+.\scripts\autoresearch.ps1 research examples\model_param_tuning\task.json --branch-mode record
+```
+
 The command writes artifacts under `runs/<run_id>/`:
 
 - `task.json`: the resolved task spec
@@ -66,6 +81,9 @@ The `research` command creates a higher-level `runs/agentic_<timestamp>/`
 directory containing:
 
 - baseline and candidate run artifacts
+- `state.json`: resumable status, phase, run ids, and final decision
+- `events.jsonl`: ordered lifecycle events
+- `artifacts.jsonl`: artifact index for reports, metrics, decisions, and inputs
 - `hypothesis.json`: agent-proposed optimization direction
 - `branch.json`: experiment branch metadata
 - `effect.json`: baseline-vs-candidate comparison
@@ -93,6 +111,10 @@ There is also a provider-agnostic LLM interface in
 environment variables. The LLM only proposes a bounded hypothesis and candidate
 search space; execution, metrics, guardrails, memory, and branch metadata remain
 controlled by the harness.
+
+The registry files make a research task inspectable after interruption: the
+system can recover which phase completed, which run ids were produced, and
+which artifacts contain the evidence trail.
 
 The intended extension points are:
 

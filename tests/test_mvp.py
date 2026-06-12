@@ -14,6 +14,7 @@ from autoresearch_harness.agentic import run_agentic_research
 from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.policy import generate_trials
+from autoresearch_harness.registry import load_research_status
 from autoresearch_harness.runner import run_task
 from autoresearch_harness.spec import load_task
 
@@ -54,9 +55,18 @@ class MvpHarnessTest(unittest.TestCase):
 
             self.assertTrue((research_dir / "hypothesis.json").exists())
             self.assertTrue((research_dir / "effect.json").exists())
+            self.assertTrue((research_dir / "state.json").exists())
+            self.assertTrue((research_dir / "events.jsonl").exists())
+            self.assertTrue((research_dir / "artifacts.jsonl").exists())
             self.assertTrue((root / "memory" / "lessons.jsonl").exists())
             self.assertEqual("accept", result["effect"]["recommendation"])
             self.assertEqual("record", result["branch"]["mode"])
+
+            status = load_research_status(root / "runs", result["research_id"])
+            self.assertEqual("completed", status["state"]["status"])
+            self.assertEqual(result["candidate_run_id"], status["state"]["candidate_run_id"])
+            self.assertGreaterEqual(len(status["events"]), 5)
+            self.assertGreaterEqual(len(status["artifacts"]), 5)
 
     def test_model_param_tuning_agentic_loop_uses_memory(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
