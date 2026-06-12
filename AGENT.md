@@ -110,6 +110,7 @@ Implemented modules:
 - `agentic.py`: orchestration for the agentic research loop
 - `llm.py`: provider-agnostic LLM client interface and OpenAI-compatible client
 - `registry.py`: durable state, events, and artifact index for resumability
+- `provenance.py`: JSONL evidence graph for artifact dependencies
 
 Supported deterministic validation scenarios:
 
@@ -143,6 +144,8 @@ Agentic runs now write:
 - `events.jsonl`: ordered lifecycle events for interruption recovery
 - `artifacts.jsonl`: evidence index pointing at task, trials, analysis, reports,
   hypothesis, branch metadata, effect, decision, and final result
+- `provenance.jsonl`: dependency graph connecting decision evidence back to
+  hypothesis, effect, baseline/candidate analysis, and trial artifacts
 
 Use `python -m autoresearch_harness status --research-id <id>` to inspect a
 previous run. Use `python -m autoresearch_harness resume --research-id <id>` to
@@ -154,6 +157,8 @@ Decision semantics are intentionally separate from effect metrics:
 - `effect.json` stores metric comparison only
 - `decision.json` stores the harness recommendation, confidence, reasons,
   blocking guardrails, and next action
+- `state.json.decision_evidence` stores a compact evidence chain for the final
+  decision, while `provenance.jsonl` stores the full graph
 
 Git state at the time these notes were added:
 

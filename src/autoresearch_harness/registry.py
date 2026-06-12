@@ -28,6 +28,9 @@ class ResearchRegistry:
         description: str,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        existing = _read_jsonl(self.research_dir / "artifacts.jsonl")
+        if any(record.get("kind") == kind and record.get("path") == str(path) for record in existing):
+            return
         record = {
             "created_at": _now(),
             "kind": kind,
@@ -65,6 +68,7 @@ def load_research_status(runs_dir: Path, research_id: str | None = None) -> dict
         "state": state,
         "events": _read_jsonl(research_dir / "events.jsonl"),
         "artifacts": _read_jsonl(research_dir / "artifacts.jsonl"),
+        "provenance": _read_jsonl(research_dir / "provenance.jsonl"),
     }
 
 

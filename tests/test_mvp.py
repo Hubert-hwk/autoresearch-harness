@@ -15,6 +15,7 @@ from autoresearch_harness.decision import make_decision
 from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.policy import generate_trials
+from autoresearch_harness.provenance import evidence_for
 from autoresearch_harness.registry import load_research_status
 from autoresearch_harness.registry import ResearchRegistry
 from autoresearch_harness.runner import run_task
@@ -71,6 +72,14 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertEqual(result["candidate_run_id"], status["state"]["candidate_run_id"])
             self.assertGreaterEqual(len(status["events"]), 5)
             self.assertGreaterEqual(len(status["artifacts"]), 5)
+            self.assertGreaterEqual(len(status["provenance"]), 5)
+            self.assertTrue(status["state"]["decision_evidence"])
+            evidence_ids = {
+                record["artifact_id"] for record in evidence_for(status["provenance"], "decision")
+            }
+            self.assertIn("effect", evidence_ids)
+            self.assertIn("baseline_analysis", evidence_ids)
+            self.assertIn("candidate_analysis", evidence_ids)
 
     def test_model_param_tuning_agentic_loop_uses_memory(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
@@ -153,6 +162,22 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertEqual("completed", status["state"]["status"])
             self.assertEqual(baseline_summary.run_id, result["baseline_run_id"])
             self.assertTrue((research_dir / "agentic_result.json").exists())
+            provenance_ids = {record["artifact_id"] for record in status["provenance"]}
+            self.assertIn("baseline_analysis", provenance_ids)
+            self.assertIn("decision", provenance_ids)
+
+    def test_memory_records_are_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            memory = MemoryManager(Path(tmp))
+            lesson = {
+                "research_id": "research_1",
+                "hypothesis_id": "hyp_1",
+                "lesson": "same lesson",
+            }
+            memory.record_lesson(lesson)
+            memory.record_lesson(lesson)
+
+            self.assertEqual(1, len(memory.read_stream("lessons")))
 
     def test_decision_engine_flags_guardrail_tradeoff_for_review(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")

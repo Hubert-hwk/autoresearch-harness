@@ -14,6 +14,7 @@ from .hypothesis import Hypothesis
 from .llm import OpenAICompatibleClient
 from .memory import MemoryManager
 from .models import Budget, MetricGoal, RunSummary, TaskSpec, TrialResult
+from .provenance import ProvenanceRecorder, evidence_for, load_provenance
 from .registry import ResearchRegistry, resolve_research_dir
 from .runner import run_task
 from .spec import load_task, task_to_dict
@@ -31,6 +32,7 @@ def run_agentic_research(
     research_dir = runs_dir / research_id
     research_dir.mkdir(parents=True, exist_ok=False)
     registry = ResearchRegistry(research_dir)
+    provenance = ProvenanceRecorder(research_dir)
     registry.state(
         research_id=research_id,
         status="running",
@@ -42,6 +44,13 @@ def run_agentic_research(
     )
     _write_json(research_dir / "task_snapshot.json", task_to_dict(task))
     registry.artifact("task_snapshot", research_dir / "task_snapshot.json", "Original task snapshot")
+    provenance.record(
+        "task_snapshot",
+        "task",
+        research_dir / "task_snapshot.json",
+        "agentic_runner",
+        supports=["baseline_task", "candidate_task"],
+    )
     registry.event("research_started", {"research_id": research_id, "task_name": task.name})
 
     return _continue_agentic_research(
@@ -156,7 +165,10 @@ def _ensure_baseline(
     state: dict[str, Any],
 ) -> RunSummary:
     if state.get("baseline_run_id"):
-        return _summary_from_run_dir(research_dir / "baseline" / state["baseline_run_id"], task.name)
+        baseline_dir = research_dir / "baseline" / state["baseline_run_id"]
+        _register_run_artifacts(registry, baseline_dir, "baseline")
+        _register_run_provenance(research_dir, baseline_dir, "baseline")
+        return _summary_from_run_dir(baseline_dir, task.name)
     baseline_summary = run_task(task, research_dir / "baseline")
     baseline_dir = research_dir / "baseline" / baseline_summary.run_id
     registry.state(phase="hypothesis", baseline_run_id=baseline_summary.run_id)
@@ -171,6 +183,7 @@ def _ensure_baseline(
         },
     )
     _register_run_artifacts(registry, baseline_dir, "baseline")
+    _register_run_provenance(research_dir, baseline_dir, "baseline")
     return baseline_summary
 
 
@@ -185,7 +198,20 @@ def _ensure_hypothesis(
     state: dict[str, Any],
 ):
     if state.get("hypothesis"):
-        return _hypothesis_from_dict(state["hypothesis"])
+        hypothesis = _hypothesis_from_dict(state["hypothesis"])
+        hypothesis_path = research_dir / "hypothesis.json"
+        if not hypothesis_path.exists():
+            _write_json(hypothesis_path, state["hypothesis"])
+        registry.artifact("hypothesis", hypothesis_path, "Agent-proposed hypothesis")
+        ProvenanceRecorder(research_dir).record(
+            "hypothesis",
+            "hypothesis",
+            hypothesis_path,
+            f"{agent_kind}_agent",
+            depends_on=["baseline_analysis"],
+            supports=["candidate_task", "effect", "decision"],
+        )
+        return hypothesis
     memory = MemoryManager(memory_dir)
     agent = _make_agent(agent_kind)
     hypothesis = agent.propose(
@@ -197,6 +223,14 @@ def _ensure_hypothesis(
     hypothesis_dict = asdict(hypothesis)
     _write_json(research_dir / "hypothesis.json", hypothesis_dict)
     registry.artifact("hypothesis", research_dir / "hypothesis.json", "Agent-proposed hypothesis")
+    ProvenanceRecorder(research_dir).record(
+        "hypothesis",
+        "hypothesis",
+        research_dir / "hypothesis.json",
+        f"{agent_kind}_agent",
+        depends_on=["baseline_analysis"],
+        supports=["candidate_task", "effect", "decision"],
+    )
     registry.state(phase="branch", hypothesis=hypothesis_dict)
     registry.event("hypothesis_proposed", {"hypothesis_id": hypothesis.id, "title": hypothesis.title})
     return hypothesis
@@ -211,11 +245,32 @@ def _ensure_branch(
     state: dict[str, Any],
 ):
     if state.get("branch"):
-        return _branch_record_from_dict(state["branch"])
+        branch_record = _branch_record_from_dict(state["branch"])
+        branch_path = research_dir / "branch.json"
+        if not branch_path.exists():
+            _write_json(branch_path, state["branch"])
+        registry.artifact("branch", branch_path, "Experiment branch metadata")
+        ProvenanceRecorder(research_dir).record(
+            "branch",
+            "branch",
+            branch_path,
+            "branch_manager",
+            depends_on=["hypothesis"],
+            supports=["candidate_task", "decision"],
+        )
+        return branch_record
     branch_record = BranchManager(repo_root).prepare(hypothesis.id, mode=branch_mode)
     branch_dict = branch_record_to_dict(branch_record)
     _write_json(research_dir / "branch.json", branch_dict)
     registry.artifact("branch", research_dir / "branch.json", "Experiment branch metadata")
+    ProvenanceRecorder(research_dir).record(
+        "branch",
+        "branch",
+        research_dir / "branch.json",
+        "branch_manager",
+        depends_on=["hypothesis"],
+        supports=["candidate_task", "decision"],
+    )
     registry.state(phase="candidate", branch=branch_dict)
     registry.event("branch_prepared", branch_dict)
     return branch_record
@@ -229,10 +284,10 @@ def _ensure_candidate(
     state: dict[str, Any],
 ) -> RunSummary:
     if state.get("candidate_run_id"):
-        return _summary_from_run_dir(
-            research_dir / "candidate" / state["candidate_run_id"],
-            f"{task.name}_agentic_candidate",
-        )
+        candidate_dir = research_dir / "candidate" / state["candidate_run_id"]
+        _register_run_artifacts(registry, candidate_dir, "candidate")
+        _register_run_provenance(research_dir, candidate_dir, "candidate")
+        return _summary_from_run_dir(candidate_dir, f"{task.name}_agentic_candidate")
     candidate_task = _candidate_task(task, hypothesis.search_space)
     candidate_summary = run_task(candidate_task, research_dir / "candidate")
     candidate_dir = research_dir / "candidate" / candidate_summary.run_id
@@ -248,6 +303,7 @@ def _ensure_candidate(
         },
     )
     _register_run_artifacts(registry, candidate_dir, "candidate")
+    _register_run_provenance(research_dir, candidate_dir, "candidate")
     return candidate_summary
 
 
@@ -296,18 +352,59 @@ def _finalize_research(
     }
     _write_json(research_dir / "effect.json", result["effect"])
     registry.artifact("effect", research_dir / "effect.json", "Baseline-vs-candidate effect comparison")
+    provenance = ProvenanceRecorder(research_dir)
+    provenance.record(
+        "effect",
+        "effect",
+        research_dir / "effect.json",
+        "effect_evaluator",
+        depends_on=["baseline_analysis", "candidate_analysis", "hypothesis"],
+        supports=["decision", "lesson"],
+    )
     _write_json(research_dir / "decision.json", result["decision"])
     registry.artifact("decision", research_dir / "decision.json", "Harness decision and next action")
+    provenance.record(
+        "decision",
+        "decision",
+        research_dir / "decision.json",
+        "decision_engine",
+        depends_on=["effect", "baseline_analysis", "candidate_analysis", "hypothesis", "branch"],
+        supports=["lesson", "report", "agentic_result"],
+    )
+    decision_evidence = evidence_for(load_provenance(research_dir), "decision")
     _write_json(research_dir / "agentic_result.json", result)
     registry.artifact("result", research_dir / "agentic_result.json", "Complete agentic research result")
+    provenance.record(
+        "agentic_result",
+        "result",
+        research_dir / "agentic_result.json",
+        "agentic_runner",
+        depends_on=["decision", "effect", "hypothesis", "branch"],
+        supports=["report"],
+    )
     _write_report(research_dir / "report.md", result)
     registry.artifact("report", research_dir / "report.md", "Human-readable agentic research report")
+    provenance.record(
+        "report",
+        "report",
+        research_dir / "report.md",
+        "agentic_runner",
+        depends_on=["agentic_result", "decision", "effect"],
+    )
     registry.state(
         status="completed",
         phase="completed",
         recommendation=decision["decision"],
         reason="; ".join(decision["reasons"]),
         decision=decision,
+        decision_evidence=[
+            {
+                "artifact_id": record["artifact_id"],
+                "kind": record["kind"],
+                "path": record["path"],
+            }
+            for record in decision_evidence
+        ],
     )
     registry.event("research_completed", {"recommendation": decision["decision"]})
     return result
@@ -480,3 +577,47 @@ def _register_run_artifacts(registry: ResearchRegistry, run_dir: Path, phase: st
                 f"{phase} {description}",
                 {"phase": phase, "filename": filename},
             )
+
+
+def _register_run_provenance(research_dir: Path, run_dir: Path, phase: str) -> None:
+    recorder = ProvenanceRecorder(research_dir)
+    dependencies = {
+        "task": ["task_snapshot"] if phase == "baseline" else ["task_snapshot", "hypothesis"],
+        "trials": [f"{phase}_task"],
+        "analysis": [f"{phase}_trials"],
+        "decisions": [f"{phase}_analysis"],
+        "report": [f"{phase}_analysis", f"{phase}_decisions"],
+    }
+    producers = {
+        "task": "runner",
+        "trials": "executor",
+        "analysis": "analysis_builder",
+        "decisions": "runner",
+        "report": "runner",
+    }
+    for stem in ["task", "trials", "analysis", "decisions", "report"]:
+        suffix = "jsonl" if stem in {"trials", "decisions"} else "json" if stem != "report" else "md"
+        filename = f"{stem}.{suffix}"
+        path = run_dir / filename
+        if path.exists():
+            recorder.record(
+                f"{phase}_{stem}",
+                stem,
+                path,
+                producers[stem],
+                depends_on=dependencies[stem],
+                supports=_supports_for_run_artifact(phase, stem),
+                metadata={"phase": phase},
+            )
+
+
+def _supports_for_run_artifact(phase: str, stem: str) -> list[str]:
+    if stem == "analysis":
+        return ["effect", "decision"]
+    if stem == "trials":
+        return [f"{phase}_analysis"]
+    if stem == "task":
+        return [f"{phase}_trials"]
+    if stem == "decisions":
+        return [f"{phase}_report"]
+    return []

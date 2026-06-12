@@ -90,6 +90,7 @@ directory containing:
 - `state.json`: resumable status, phase, run ids, and final decision
 - `events.jsonl`: ordered lifecycle events
 - `artifacts.jsonl`: artifact index for reports, metrics, decisions, and inputs
+- `provenance.jsonl`: evidence graph linking decisions to supporting artifacts
 - `hypothesis.json`: agent-proposed optimization direction
 - `branch.json`: experiment branch metadata
 - `effect.json`: baseline-vs-candidate comparison
@@ -130,6 +131,8 @@ Agentic runs separate metric comparison from governance decisions:
 - `effect.json` records metric deltas and pass-rate deltas
 - `decision.json` records the harness decision, confidence, reasons,
   blocking guardrails, and next action
+- `provenance.jsonl` records dependencies such as
+  `decision -> effect -> baseline/candidate analysis -> trials`
 
 The intended extension points are:
 

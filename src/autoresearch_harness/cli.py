@@ -87,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"recommendation={state.get('recommendation')}")
             print(f"events={len(status['events'])}")
             print(f"artifacts={len(status['artifacts'])}")
+            print(f"provenance={len(status['provenance'])}")
+            print(f"decision_evidence={len(state.get('decision_evidence', []))}")
         return 0
 
     if args.command == "resume":
