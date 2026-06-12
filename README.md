@@ -2,6 +2,9 @@
 
 AutoResearch harness MVP for business optimization loops.
 
+See [AGENT.md](AGENT.md) for the project intent, current state, and the
+agentic AutoResearch harness roadmap.
+
 This project treats autoresearch as an engineering harness, not as an
 automatic paper writer. The first MVP focuses on bounded trial loops:
 
