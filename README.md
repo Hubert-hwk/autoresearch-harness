@@ -47,6 +47,12 @@ Inspect the latest agentic run, or a specific run, with:
 .\scripts\autoresearch.ps1 status --research-id agentic_... --json
 ```
 
+Resume an interrupted agentic run with:
+
+```powershell
+.\scripts\autoresearch.ps1 resume --research-id agentic_...
+```
+
 Use a model-backed research planner with an OpenAI-compatible API:
 
 ```powershell
@@ -115,6 +121,8 @@ controlled by the harness.
 The registry files make a research task inspectable after interruption: the
 system can recover which phase completed, which run ids were produced, and
 which artifacts contain the evidence trail.
+The `resume` command can continue from completed baseline, hypothesis, branch,
+or candidate phases without rerunning earlier completed phases.
 
 The intended extension points are:
 

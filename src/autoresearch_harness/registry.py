@@ -68,6 +68,10 @@ def load_research_status(runs_dir: Path, research_id: str | None = None) -> dict
     }
 
 
+def resolve_research_dir(runs_dir: Path, research_id: str | None) -> Path:
+    return _resolve_research_dir(runs_dir, research_id)
+
+
 def _resolve_research_dir(runs_dir: Path, research_id: str | None) -> Path:
     if research_id:
         return runs_dir / research_id
@@ -98,4 +102,3 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-

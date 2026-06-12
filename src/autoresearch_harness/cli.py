@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .agentic import run_agentic_research
+from .agentic import resume_agentic_research, run_agentic_research
 from .registry import load_research_status
 from .runner import run_task
 from .spec import load_task
@@ -30,6 +30,12 @@ def main(argv: list[str] | None = None) -> int:
     status_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
     status_parser.add_argument("--research-id")
     status_parser.add_argument("--json", action="store_true")
+
+    resume_parser = subparsers.add_parser("resume", help="resume an interrupted agentic run")
+    resume_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    resume_parser.add_argument("--research-id")
+    resume_parser.add_argument("--memory-dir", type=Path)
+    resume_parser.add_argument("--repo-root", type=Path, default=Path("."))
 
     args = parser.parse_args(argv)
 
@@ -81,6 +87,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"recommendation={state.get('recommendation')}")
             print(f"events={len(status['events'])}")
             print(f"artifacts={len(status['artifacts'])}")
+        return 0
+
+    if args.command == "resume":
+        result = resume_agentic_research(
+            runs_dir=args.runs_dir,
+            research_id=args.research_id,
+            repo_root=args.repo_root.resolve(),
+            memory_dir=args.memory_dir,
+        )
+        effect = result["effect"]
+        print(f"research_id={result['research_id']}")
+        print(f"recommendation={effect['recommendation']}")
+        print(f"reason={effect['reason']}")
         return 0
 
     return 1

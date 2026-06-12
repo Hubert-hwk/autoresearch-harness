@@ -144,8 +144,9 @@ Agentic runs now write:
   hypothesis, branch metadata, effect, and final result
 
 Use `python -m autoresearch_harness status --research-id <id>` to inspect a
-previous run. This is the first resumability layer; future work should add
-execution resume from the last completed phase.
+previous run. Use `python -m autoresearch_harness resume --research-id <id>` to
+continue from the last completed phase. The current resume implementation can
+reuse completed baseline, hypothesis, branch, and candidate artifacts.
 
 Git state at the time these notes were added:
 
@@ -172,7 +173,8 @@ Missing major capabilities:
   comparison
 - `DecisionEngine`: accept, reject, retry, mutate, expand search, or stop
 - `RunRegistry`: multi-run comparison, resume, replay, and run lineage
-- true resume execution from `state.json`, not just status inspection
+- stronger resume safety checks, such as command fingerprints, environment
+  fingerprints, and duplicate memory-write prevention
 - real business executors instead of deterministic simulations
 - GitHub remote, CI, release discipline, and richer documentation
 

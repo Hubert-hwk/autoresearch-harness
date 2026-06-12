@@ -10,13 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from autoresearch_harness.agent import LLMResearchAgent
-from autoresearch_harness.agentic import run_agentic_research
+from autoresearch_harness.agentic import resume_agentic_research, run_agentic_research
 from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.policy import generate_trials
 from autoresearch_harness.registry import load_research_status
+from autoresearch_harness.registry import ResearchRegistry
 from autoresearch_harness.runner import run_task
 from autoresearch_harness.spec import load_task
+from autoresearch_harness.spec import task_to_dict
 
 
 class MvpHarnessTest(unittest.TestCase):
@@ -118,6 +120,37 @@ class MvpHarnessTest(unittest.TestCase):
         self.assertEqual([0.2], hypothesis.search_space["temperature"]["values"])
         self.assertEqual([1024], hypothesis.search_space["max_tokens"]["values"])
         self.assertNotIn("unknown_param", hypothesis.search_space)
+
+    def test_resume_continues_after_baseline(self) -> None:
+        task = load_task(ROOT / "examples" / "prompt_tuning" / "task.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            research_id = "agentic_resume_test"
+            research_dir = root / "runs" / research_id
+            registry = ResearchRegistry(research_dir)
+            registry.state(
+                research_id=research_id,
+                status="running",
+                phase="baseline",
+                task=task_to_dict(task),
+                agent_kind="rule",
+                branch_mode="record",
+                memory_dir=str(root / "memory"),
+            )
+            baseline_summary = run_task(task, research_dir / "baseline")
+            registry.state(phase="hypothesis", baseline_run_id=baseline_summary.run_id)
+
+            result = resume_agentic_research(
+                runs_dir=root / "runs",
+                research_id=research_id,
+                repo_root=ROOT,
+                memory_dir=root / "memory",
+            )
+            status = load_research_status(root / "runs", research_id)
+
+            self.assertEqual("completed", status["state"]["status"])
+            self.assertEqual(baseline_summary.run_id, result["baseline_run_id"])
+            self.assertTrue((research_dir / "agentic_result.json").exists())
 
 
 class FakeLLMClient:
