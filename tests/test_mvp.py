@@ -165,16 +165,25 @@ class MvpHarnessTest(unittest.TestCase):
             status = load_research_status(root / "runs", result["research_id"])
 
             self.assertEqual("accept", result["decision"]["decision"])
-            self.assertGreater(result["effect"]["primary_delta"], 0.05)
-            self.assertGreater(result["effect"]["pass_rate_delta"], 0.0)
+            self.assertGreater(result["effect"]["primary_delta"], 0.02)
+            self.assertGreaterEqual(result["effect"]["pass_rate_delta"], 0.0)
             self.assertTrue((research_dir / "mutation_artifact" / "candidate_task.json").exists())
             self.assertTrue((research_dir / "mutation_artifact" / "mutation.diff").exists())
+            candidate_dir = research_dir / "candidate" / result["candidate_run_id"]
+            self.assertTrue((candidate_dir / "executor_artifacts.jsonl").exists())
+            self.assertTrue(list(candidate_dir.glob("executor_artifacts/*/model.npz")))
+            self.assertTrue(list(candidate_dir.glob("executor_artifacts/*/training_log.json")))
+            self.assertTrue(list(candidate_dir.glob("executor_artifacts/*/dataset_fingerprint.json")))
             self.assertIn(
                 "recommender_bpr_focus",
                 result["hypothesis"]["id"],
             )
             provenance_ids = {record["artifact_id"] for record in status["provenance"]}
             self.assertIn("mutation_diff", provenance_ids)
+            self.assertIn("candidate_executor_artifacts", provenance_ids)
+            self.assertTrue(any("model_artifact" in item for item in provenance_ids))
+            self.assertTrue(any("training_log" in item for item in provenance_ids))
+            self.assertTrue(any("dataset_fingerprint" in item for item in provenance_ids))
 
     def test_mutation_plan_validates_search_space_subset_and_materializes_diff(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")

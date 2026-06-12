@@ -27,6 +27,8 @@ def run_task(task, runs_dir: Path) -> RunSummary:
     if executor_cls is None:
         raise ValueError(f"Unknown executor: {task.executor}")
     executor = executor_cls(task)
+    if hasattr(executor, "set_run_dir"):
+        executor.set_run_dir(run_dir)
 
     best: TrialResult | None = None
     results: list[TrialResult] = []

@@ -121,6 +121,8 @@ The included adapters are:
 - `model_param_tuning`: a deterministic model serving parameter simulation
 - `recommender_bpr`: a small real NumPy BPR recommender training and evaluation
   loop
+  with three-seed aggregate metrics, model artifacts, training logs, and dataset
+  fingerprints
 
 Together they demonstrate that the harness protocol is not tied to one
 business scenario.

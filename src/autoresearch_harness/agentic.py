@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -905,6 +906,7 @@ def _register_run_artifacts(registry: ResearchRegistry, run_dir: Path, phase: st
         ("trials.jsonl", "Trial-level metrics and guardrail results"),
         ("analysis.json", "Run analysis with pass rate, failures, and top trials"),
         ("decisions.jsonl", "Run decision events"),
+        ("executor_artifacts.jsonl", "Executor-produced model, log, or dataset artifacts"),
         ("report.md", "Human-readable run report"),
     ]:
         path = run_dir / filename
@@ -915,6 +917,28 @@ def _register_run_artifacts(registry: ResearchRegistry, run_dir: Path, phase: st
                 f"{phase} {description}",
                 {"phase": phase, "filename": filename},
             )
+            if filename == "executor_artifacts.jsonl":
+                _register_executor_artifact_entries(registry, path, phase)
+
+
+def _register_executor_artifact_entries(
+    registry: ResearchRegistry,
+    manifest_path: Path,
+    phase: str,
+) -> None:
+    for record in _read_jsonl(manifest_path):
+        artifact_path = Path(record["path"])
+        registry.artifact(
+            f"{phase}_{record['kind']}",
+            artifact_path,
+            f"{phase} {record.get('description', record['kind'])}",
+            {
+                "phase": phase,
+                "trial_id": record.get("trial_id"),
+                "kind": record["kind"],
+                **record.get("metadata", {}),
+            },
+        )
 
 
 def _register_run_provenance(research_dir: Path, run_dir: Path, phase: str) -> None:
@@ -922,8 +946,9 @@ def _register_run_provenance(research_dir: Path, run_dir: Path, phase: str) -> N
     dependencies = {
         "task": ["task_snapshot"] if phase == "baseline" else ["task_snapshot", "hypothesis"],
         "trials": [f"{phase}_task"],
-        "analysis": [f"{phase}_trials"],
+        "analysis": [f"{phase}_trials", f"{phase}_executor_artifacts"],
         "decisions": [f"{phase}_analysis"],
+        "executor_artifacts": [f"{phase}_trials"],
         "report": [f"{phase}_analysis", f"{phase}_decisions"],
     }
     if phase == "candidate":
@@ -939,19 +964,29 @@ def _register_run_provenance(research_dir: Path, run_dir: Path, phase: str) -> N
         "trials": "executor",
         "analysis": "analysis_builder",
         "decisions": "runner",
+        "executor_artifacts": "executor",
         "report": "runner",
     }
-    for stem in ["task", "trials", "analysis", "decisions", "report"]:
+    for stem in ["task", "trials", "analysis", "decisions", "executor_artifacts", "report"]:
         suffix = "jsonl" if stem in {"trials", "decisions"} else "json" if stem != "report" else "md"
+        if stem == "executor_artifacts":
+            suffix = "jsonl"
         filename = f"{stem}.{suffix}"
         path = run_dir / filename
         if path.exists():
+            extra_dependencies: list[str] = []
+            if stem == "executor_artifacts":
+                extra_dependencies = _register_executor_artifact_entry_provenance(
+                    recorder,
+                    path,
+                    phase,
+                )
             recorder.record(
                 f"{phase}_{stem}",
                 stem,
                 path,
                 producers[stem],
-                depends_on=dependencies[stem],
+                depends_on=dependencies[stem] + extra_dependencies,
                 supports=_supports_for_run_artifact(phase, stem),
                 metadata={"phase": phase},
             )
@@ -966,4 +1001,47 @@ def _supports_for_run_artifact(phase: str, stem: str) -> list[str]:
         return [f"{phase}_trials"]
     if stem == "decisions":
         return [f"{phase}_report"]
+    if stem == "executor_artifacts":
+        return ["effect", "decision"]
     return []
+
+
+def _register_executor_artifact_entry_provenance(
+    recorder: ProvenanceRecorder,
+    manifest_path: Path,
+    phase: str,
+) -> list[str]:
+    artifact_ids: list[str] = []
+    for record in _read_jsonl(manifest_path):
+        artifact_id = _executor_artifact_id(phase, record)
+        artifact_ids.append(artifact_id)
+        recorder.record(
+            artifact_id,
+            record["kind"],
+            Path(record["path"]),
+            "executor",
+            depends_on=[f"{phase}_trials"],
+            supports=[f"{phase}_executor_artifacts", f"{phase}_analysis"],
+            metadata={
+                "phase": phase,
+                "trial_id": record.get("trial_id"),
+                **record.get("metadata", {}),
+            },
+        )
+    return artifact_ids
+
+
+def _executor_artifact_id(phase: str, record: dict[str, Any]) -> str:
+    trial_id = str(record.get("trial_id", "run"))
+    kind = str(record.get("kind", "artifact"))
+    path_name = Path(record.get("path", kind)).stem
+    raw = f"{phase}_{trial_id}_{kind}_{path_name}"
+    return re.sub(r"[^a-zA-Z0-9_]+", "_", raw).strip("_").lower()
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
