@@ -36,6 +36,7 @@ Objective / Business Goal
   -> Agent Research Planner
   -> Hypothesis / Trial Planner
   -> Branch / Workspace Manager
+  -> Mutation Protocol
   -> Trial Executor
   -> Effect Evaluator
   -> Decision Engine
@@ -108,6 +109,7 @@ Implemented modules:
 - `decision.py`: harness decision engine for accept/reject/retry/needs_review
 - `memory.py`: JSONL-backed memory streams
 - `memory_index.py`: relevance ranking for prior lessons before planning
+- `mutation.py`: declarative mutation protocol for candidate task changes
 - `agentic.py`: orchestration for the agentic research loop
 - `llm.py`: provider-agnostic LLM client interface and OpenAI-compatible client
 - `registry.py`: durable state, events, and artifact index for resumability
@@ -148,6 +150,8 @@ Agentic runs now write:
 - `provenance.jsonl`: dependency graph connecting decision evidence back to
   hypothesis, effect, baseline/candidate analysis, and trial artifacts
 - `memory_context.json`: ranked prior lessons selected for the hypothesis step
+- `mutation_plan.json`: validated mutation manifest applied before candidate
+  execution
 
 Memory retrieval is intentionally lightweight in this version. The
 `MemoryManager` still stores append-only JSONL lessons, while
@@ -156,6 +160,14 @@ reasons, guardrail metrics, primary metric, and search-space parameters. The
 selected memory context is written as a first-class artifact before the agent
 proposes a hypothesis, so later readers can inspect which prior knowledge was
 available to the planner.
+
+Mutation protocol is intentionally narrow in this version. The harness converts
+the agent hypothesis into `mutation_plan.json`, validates that candidate
+search-space values remain within the original task contract, records the
+operations, and derives the candidate task from that manifest. This gives the
+system a stable place to later add prompt patches, config patches, code diffs,
+and branch commits without letting free-form agent output directly mutate the
+workspace.
 
 Use `python -m autoresearch_harness status --research-id <id>` to inspect a
 previous run. Use `python -m autoresearch_harness resume --research-id <id>` to
@@ -186,7 +198,8 @@ Missing major capabilities:
 - LLM-backed or model-backed `ResearchAgent` that proposes optimization
   directions from objectives, context, metrics, history, and failures
 - richer provider-specific LLM clients and prompt templates
-- richer `Hypothesis` planning with code/config/prompt mutations
+- richer `Hypothesis` planning with code/config/prompt mutations beyond the
+  current safe search-space mutation protocol
 - richer `MemoryManager` retrieval over successful patterns, failure patterns,
   bad cases, domain notes, and semantic similarity beyond the current rule
   based memory index

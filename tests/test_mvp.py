@@ -12,9 +12,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from autoresearch_harness.agent import LLMResearchAgent
 from autoresearch_harness.agentic import resume_agentic_research, run_agentic_research
 from autoresearch_harness.decision import make_decision
+from autoresearch_harness.hypothesis import Hypothesis
 from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.memory_index import build_memory_context
+from autoresearch_harness.mutation import apply_mutation_plan, build_mutation_plan
 from autoresearch_harness.policy import generate_trials
 from autoresearch_harness.provenance import evidence_for
 from autoresearch_harness.registry import load_research_status
@@ -59,6 +61,7 @@ class MvpHarnessTest(unittest.TestCase):
             research_dir = Path(result["paths"]["research_dir"])
 
             self.assertTrue((research_dir / "hypothesis.json").exists())
+            self.assertTrue((research_dir / "mutation_plan.json").exists())
             self.assertTrue((research_dir / "effect.json").exists())
             self.assertTrue((research_dir / "decision.json").exists())
             self.assertTrue((research_dir / "state.json").exists())
@@ -79,6 +82,7 @@ class MvpHarnessTest(unittest.TestCase):
                 record["artifact_id"] for record in evidence_for(status["provenance"], "decision")
             }
             self.assertIn("effect", evidence_ids)
+            self.assertIn("mutation_plan", evidence_ids)
             self.assertIn("baseline_analysis", evidence_ids)
             self.assertIn("candidate_analysis", evidence_ids)
 
@@ -107,11 +111,44 @@ class MvpHarnessTest(unittest.TestCase):
             provenance_ids = {record["artifact_id"] for record in status["provenance"]}
 
             self.assertTrue((research_dir / "memory_context.json").exists())
+            self.assertTrue((research_dir / "mutation_plan.json").exists())
             self.assertIn("memory_context", provenance_ids)
+            self.assertIn("mutation_plan", provenance_ids)
             self.assertTrue(status["state"]["memory_context"]["matches"])
             self.assertIn("stable cost-aware", hypothesis["title"])
             self.assertEqual([0.0, 0.2, 0.4], hypothesis["search_space"]["temperature"]["values"])
+            self.assertEqual(
+                [0.0, 0.2, 0.4],
+                result["mutation_plan"]["candidate_search_space"]["temperature"]["values"],
+            )
             self.assertEqual("accept", result["decision"]["decision"])
+
+    def test_mutation_plan_validates_search_space_subset(self) -> None:
+        task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
+        hypothesis = Hypothesis(
+            id="hyp_subset",
+            title="Try a bounded subset",
+            rationale="Validate mutation protocol subset enforcement.",
+            expected_effects={"quality_score": "observe"},
+            risks=[],
+            search_space={
+                "temperature": {"type": "categorical", "values": [0.2, 9.9]},
+                "max_tokens": {"type": "categorical", "values": [512]},
+                "unknown_param": {"type": "categorical", "values": ["x"]},
+            },
+            validation_plan="Build mutation plan only.",
+            source_run_id="source_run",
+        )
+
+        plan = build_mutation_plan(task, hypothesis)
+        candidate_task = apply_mutation_plan(task, plan)
+
+        self.assertEqual("mutation.v1", plan.protocol_version)
+        self.assertEqual([0.2], plan.candidate_search_space["temperature"]["values"])
+        self.assertEqual([512], plan.candidate_search_space["max_tokens"]["values"])
+        self.assertNotIn("unknown_param", plan.candidate_search_space)
+        self.assertEqual(plan.candidate_budget, candidate_task.budget.max_trials)
+        self.assertTrue(plan.operations)
 
     def test_memory_index_ranks_relevant_lessons(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")

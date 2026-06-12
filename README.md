@@ -93,6 +93,8 @@ directory containing:
 - `provenance.jsonl`: evidence graph linking decisions to supporting artifacts
 - `memory_context.json`: ranked prior lessons used by the agent planner
 - `hypothesis.json`: agent-proposed optimization direction
+- `mutation_plan.json`: validated mutation protocol manifest derived from the
+  hypothesis
 - `branch.json`: experiment branch metadata
 - `effect.json`: baseline-vs-candidate comparison
 - `decision.json`: accept/reject/retry/needs_review decision and next action
@@ -133,13 +135,20 @@ guardrails, primary metric, and search-space parameter overlap, writes the
 selected context to `memory_context.json`, and links it into provenance as
 evidence for the hypothesis.
 
+After branch metadata is prepared, the harness converts the hypothesis into a
+`mutation_plan.json` manifest. In the current version, the protocol supports
+safe search-space mutations only: the candidate task may narrow parameter
+values within the original task bounds, but it cannot introduce unknown
+parameters or out-of-contract values. The candidate run is derived from this
+manifest rather than directly from free-form agent output.
+
 Agentic runs separate metric comparison from governance decisions:
 
 - `effect.json` records metric deltas and pass-rate deltas
 - `decision.json` records the harness decision, confidence, reasons,
   blocking guardrails, and next action
 - `provenance.jsonl` records dependencies such as
-  `decision -> effect -> baseline/candidate analysis -> trials`
+  `decision -> effect -> candidate analysis -> mutation plan -> hypothesis`
 
 The intended extension points are:
 

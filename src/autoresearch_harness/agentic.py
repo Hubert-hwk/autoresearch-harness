@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,6 +15,13 @@ from .llm import OpenAICompatibleClient
 from .memory import MemoryManager
 from .memory_index import build_memory_context, compact_memory_context, records_from_context
 from .models import Budget, MetricGoal, RunSummary, TaskSpec, TrialResult
+from .mutation import (
+    MutationPlan,
+    apply_mutation_plan,
+    build_mutation_plan,
+    mutation_plan_from_dict,
+    mutation_plan_to_dict,
+)
 from .provenance import ProvenanceRecorder, evidence_for, load_provenance
 from .registry import ResearchRegistry, resolve_research_dir
 from .runner import run_task
@@ -125,8 +132,17 @@ def _continue_agentic_research(
         branch_mode=branch_mode,
         state=state,
     )
+    state = _read_state(research_dir)
+    mutation_plan = _ensure_mutation_plan(
+        task=task,
+        hypothesis=hypothesis,
+        research_dir=research_dir,
+        registry=registry,
+        state=state,
+    )
 
-    candidate_summary = _ensure_candidate(task, hypothesis, research_dir, registry, state)
+    state = _read_state(research_dir)
+    candidate_summary = _ensure_candidate(task, mutation_plan, research_dir, registry, state)
     candidate_analysis = _read_analysis(research_dir / "candidate", candidate_summary)
 
     return _finalize_research(
@@ -139,23 +155,9 @@ def _continue_agentic_research(
         candidate_summary=candidate_summary,
         candidate_analysis=candidate_analysis,
         hypothesis=hypothesis,
+        mutation_plan=mutation_plan,
         branch=branch_record_to_dict(branch_record),
         agent_kind=agent_kind,
-    )
-
-
-def _candidate_task(task: TaskSpec, search_space: dict[str, dict[str, Any]]) -> TaskSpec:
-    max_trials = 1
-    for spec in search_space.values():
-        if spec.get("type", "categorical") == "categorical":
-            max_trials *= len(spec["values"])
-        else:
-            max_trials *= int(spec.get("steps", 5))
-    return replace(
-        task,
-        name=f"{task.name}_agentic_candidate",
-        search_space=search_space,
-        budget=Budget(max_trials=max_trials),
     )
 
 
@@ -316,14 +318,61 @@ def _ensure_branch(
         depends_on=["hypothesis"],
         supports=["candidate_task", "decision"],
     )
-    registry.state(phase="candidate", branch=branch_dict)
+    registry.state(phase="mutation", branch=branch_dict)
     registry.event("branch_prepared", branch_dict)
     return branch_record
 
 
-def _ensure_candidate(
+def _ensure_mutation_plan(
     task: TaskSpec,
     hypothesis,
+    research_dir: Path,
+    registry: ResearchRegistry,
+    state: dict[str, Any],
+) -> MutationPlan:
+    if state.get("mutation_plan"):
+        mutation_plan = mutation_plan_from_dict(state["mutation_plan"])
+        mutation_path = research_dir / "mutation_plan.json"
+        if not mutation_path.exists():
+            _write_json(mutation_path, state["mutation_plan"])
+        _register_mutation_plan(research_dir, registry)
+        return mutation_plan
+
+    mutation_plan = build_mutation_plan(task, hypothesis)
+    mutation_dict = mutation_plan_to_dict(mutation_plan)
+    _write_json(research_dir / "mutation_plan.json", mutation_dict)
+    _register_mutation_plan(research_dir, registry)
+    registry.state(phase="candidate", mutation_plan=mutation_dict)
+    registry.event(
+        "mutation_plan_prepared",
+        {
+            "hypothesis_id": hypothesis.id,
+            "operations": len(mutation_plan.operations),
+            "candidate_budget": mutation_plan.candidate_budget,
+        },
+    )
+    return mutation_plan
+
+
+def _register_mutation_plan(
+    research_dir: Path,
+    registry: ResearchRegistry,
+) -> None:
+    mutation_path = research_dir / "mutation_plan.json"
+    registry.artifact("mutation_plan", mutation_path, "Validated mutation protocol manifest")
+    ProvenanceRecorder(research_dir).record(
+        "mutation_plan",
+        "mutation_plan",
+        mutation_path,
+        "mutation_protocol",
+        depends_on=["hypothesis", "branch"],
+        supports=["candidate_task", "effect", "decision"],
+    )
+
+
+def _ensure_candidate(
+    task: TaskSpec,
+    mutation_plan: MutationPlan,
     research_dir: Path,
     registry: ResearchRegistry,
     state: dict[str, Any],
@@ -333,7 +382,7 @@ def _ensure_candidate(
         _register_run_artifacts(registry, candidate_dir, "candidate")
         _register_run_provenance(research_dir, candidate_dir, "candidate")
         return _summary_from_run_dir(candidate_dir, f"{task.name}_agentic_candidate")
-    candidate_task = _candidate_task(task, hypothesis.search_space)
+    candidate_task = apply_mutation_plan(task, mutation_plan)
     candidate_summary = run_task(candidate_task, research_dir / "candidate")
     candidate_dir = research_dir / "candidate" / candidate_summary.run_id
     registry.state(phase="evaluation", candidate_run_id=candidate_summary.run_id)
@@ -362,6 +411,7 @@ def _finalize_research(
     candidate_summary: RunSummary,
     candidate_analysis: dict[str, Any],
     hypothesis,
+    mutation_plan: MutationPlan,
     branch: dict[str, Any],
     agent_kind: str,
 ) -> dict[str, Any]:
@@ -386,6 +436,7 @@ def _finalize_research(
         "baseline_run_id": baseline_summary.run_id,
         "candidate_run_id": candidate_summary.run_id,
         "hypothesis": asdict(hypothesis),
+        "mutation_plan": mutation_plan_to_dict(mutation_plan),
         "branch": branch,
         "agent_kind": agent_kind,
         "effect": effect,
@@ -403,7 +454,7 @@ def _finalize_research(
         "effect",
         research_dir / "effect.json",
         "effect_evaluator",
-        depends_on=["baseline_analysis", "candidate_analysis", "hypothesis"],
+        depends_on=["baseline_analysis", "candidate_analysis", "hypothesis", "mutation_plan"],
         supports=["decision", "lesson"],
     )
     _write_json(research_dir / "decision.json", result["decision"])
@@ -413,7 +464,14 @@ def _finalize_research(
         "decision",
         research_dir / "decision.json",
         "decision_engine",
-        depends_on=["effect", "baseline_analysis", "candidate_analysis", "hypothesis", "branch"],
+        depends_on=[
+            "effect",
+            "baseline_analysis",
+            "candidate_analysis",
+            "hypothesis",
+            "mutation_plan",
+            "branch",
+        ],
         supports=["lesson", "report", "agentic_result"],
     )
     decision_evidence = evidence_for(load_provenance(research_dir), "decision")
@@ -424,7 +482,7 @@ def _finalize_research(
         "result",
         research_dir / "agentic_result.json",
         "agentic_runner",
-        depends_on=["decision", "effect", "hypothesis", "branch"],
+        depends_on=["decision", "effect", "hypothesis", "mutation_plan", "branch"],
         supports=["report"],
     )
     _write_report(research_dir / "report.md", result)
@@ -583,6 +641,8 @@ def _write_report(path: Path, result: dict[str, Any]) -> None:
         f"# Agentic AutoResearch Run: {result['research_id']}",
         "",
         f"- Hypothesis: `{result['hypothesis']['title']}`",
+        f"- Mutation protocol: `{result['mutation_plan']['protocol_version']}`",
+        f"- Mutation operations: `{len(result['mutation_plan']['operations'])}`",
         f"- Branch mode: `{result['branch']['mode']}`",
         f"- Agent: `{result['agent_kind']}`",
         f"- Experiment branch: `{result['branch']['experiment_branch']}`",
@@ -633,6 +693,8 @@ def _register_run_provenance(research_dir: Path, run_dir: Path, phase: str) -> N
         "decisions": [f"{phase}_analysis"],
         "report": [f"{phase}_analysis", f"{phase}_decisions"],
     }
+    if phase == "candidate":
+        dependencies["task"] = ["task_snapshot", "hypothesis", "mutation_plan"]
     producers = {
         "task": "runner",
         "trials": "executor",
