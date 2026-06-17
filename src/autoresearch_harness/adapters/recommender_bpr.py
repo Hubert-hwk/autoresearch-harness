@@ -91,7 +91,9 @@ class RecommenderBprExecutor:
                 best_seed_ndcg = seed_metrics["ndcg_at_10"]
                 best_seed_model = (seed, user_factors, item_factors)
 
-        train_time_sec = time.perf_counter() - started
+        train_time_sec_total = time.perf_counter() - started
+        train_time_sec_mean = _mean(seed_results, "train_time_sec")
+        train_time_sec_std = _std(seed_results, "train_time_sec")
         metrics = {
             "ndcg_at_10": round(_mean(seed_results, "ndcg_at_10"), 6),
             "ndcg_at_10_std": round(_std(seed_results, "ndcg_at_10"), 6),
@@ -99,7 +101,10 @@ class RecommenderBprExecutor:
             "hit_rate_at_10_std": round(_std(seed_results, "hit_rate_at_10"), 6),
             "coverage_at_10": round(_mean(seed_results, "coverage_at_10"), 6),
             "coverage_at_10_std": round(_std(seed_results, "coverage_at_10"), 6),
-            "train_time_sec": round(train_time_sec, 6),
+            "train_time_sec": round(train_time_sec_mean, 6),
+            "train_time_sec_mean": round(train_time_sec_mean, 6),
+            "train_time_sec_std": round(train_time_sec_std, 6),
+            "train_time_sec_total": round(train_time_sec_total, 6),
             "seed_count": float(len(SEEDS)),
         }
         if self.run_dir and best_seed_model:

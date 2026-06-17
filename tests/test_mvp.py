@@ -165,12 +165,21 @@ class MvpHarnessTest(unittest.TestCase):
             research_dir = Path(result["paths"]["research_dir"])
             status = load_research_status(root / "runs", result["research_id"])
 
-            self.assertEqual("accept", result["decision"]["decision"])
+            self.assertEqual("needs_review", result["decision"]["decision"])
+            self.assertIn("run_more_seeds", result["decision"]["next_action"])
             self.assertGreater(result["effect"]["primary_delta"], 0.02)
             self.assertGreaterEqual(result["effect"]["pass_rate_delta"], 0.0)
             self.assertTrue((research_dir / "mutation_artifact" / "candidate_task.json").exists())
             self.assertTrue((research_dir / "mutation_artifact" / "mutation.diff").exists())
             candidate_dir = research_dir / "candidate" / result["candidate_run_id"]
+            candidate_analysis = json.loads(
+                (candidate_dir / "analysis.json").read_text(encoding="utf-8")
+            )
+            best_metrics = candidate_analysis["top_trials"][0]["metrics"]
+            self.assertIn("train_time_sec_mean", best_metrics)
+            self.assertIn("train_time_sec_std", best_metrics)
+            self.assertIn("train_time_sec_total", best_metrics)
+            self.assertEqual(best_metrics["train_time_sec"], best_metrics["train_time_sec_mean"])
             self.assertTrue((candidate_dir / "executor_artifacts.jsonl").exists())
             self.assertTrue(list(candidate_dir.glob("executor_artifacts/*/model.npz")))
             self.assertTrue(list(candidate_dir.glob("executor_artifacts/*/training_log.json")))
@@ -411,6 +420,36 @@ class MvpHarnessTest(unittest.TestCase):
         )
 
         self.assertEqual("reject", decision.decision)
+
+    def test_decision_engine_requires_review_for_std_sized_improvement(self) -> None:
+        task = load_task(ROOT / "examples" / "recommender_bpr" / "task.json")
+        decision = make_decision(
+            task,
+            baseline_analysis={
+                "pass_rate": 0.6,
+                "failure_reasons": {},
+                "top_trials": [
+                    {
+                        "primary_metric": 0.039020,
+                        "metrics": {"ndcg_at_10": 0.039020, "ndcg_at_10_std": 0.0017},
+                    }
+                ],
+            },
+            candidate_analysis={
+                "pass_rate": 1.0,
+                "failure_reasons": {},
+                "top_trials": [
+                    {
+                        "primary_metric": 0.039222,
+                        "metrics": {"ndcg_at_10": 0.039222, "ndcg_at_10_std": 0.0025},
+                    }
+                ],
+            },
+            effect={"primary_delta": 0.000202, "pass_rate_delta": 0.4},
+        )
+
+        self.assertEqual("needs_review", decision.decision)
+        self.assertIn("run_more_seeds", decision.next_action)
 
 
 class FakeLLMClient:

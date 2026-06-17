@@ -134,7 +134,9 @@ The included adapters are:
 - `recommender_bpr`: a small real NumPy BPR recommender training and evaluation
   loop
   with three-seed aggregate metrics, model artifacts, training logs, and dataset
-  fingerprints
+  fingerprints. Runtime metrics separate per-seed mean/std from total trial
+  time through `train_time_sec_mean`, `train_time_sec_std`, and
+  `train_time_sec_total`.
 - `examples/recommender_movielens_100k`: a larger standard benchmark validation
   pack using the same BPR adapter on MovieLens 100K prepared outside the repo
 
@@ -189,6 +191,12 @@ Agentic runs separate metric comparison from governance decisions:
   blocking guardrails, and next action
 - `provenance.jsonl` records dependencies such as
   `decision -> effect -> candidate analysis -> mutation artifact -> mutation diff`
+
+If a top trial exposes `<primary_metric>_std`, the decision engine treats
+primary-metric improvements smaller than the combined baseline/candidate
+standard deviation as `needs_review` rather than `accept`. This keeps
+multi-seed recommender experiments from promoting changes whose observed gain
+is within measurement noise.
 
 The intended extension points are:
 

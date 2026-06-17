@@ -25,6 +25,7 @@ def make_decision(
     pass_rate_delta = effect.get("pass_rate_delta", 0.0)
     new_failures = _new_failure_reasons(baseline_analysis, candidate_analysis)
     candidate_failures = candidate_analysis.get("failure_reasons", {})
+    uncertainty = _primary_uncertainty(task, baseline_analysis, candidate_analysis)
 
     if delta is None:
         return Decision(
@@ -42,6 +43,21 @@ def make_decision(
             reasons=[f"Candidate reduced {task.primary_metric.name} by {abs(delta):.6f}."],
             blocking_guardrails=list(candidate_failures),
             next_action="try_alternative_hypothesis",
+        )
+
+    if delta > 0 and uncertainty is not None and delta <= uncertainty:
+        return Decision(
+            decision="needs_review",
+            confidence=0.55,
+            reasons=[
+                (
+                    f"Candidate improved {task.primary_metric.name} by {delta:.6f}, "
+                    f"but this is within observed metric noise ({uncertainty:.6f})."
+                ),
+                "Run more seeds or a larger validation split before promotion.",
+            ],
+            blocking_guardrails=[],
+            next_action="run_more_seeds_or_expand_validation",
         )
 
     if pass_rate_delta < 0 and delta > 0:
@@ -100,3 +116,25 @@ def _new_failure_reasons(
     candidate_failures = set(candidate_analysis.get("failure_reasons", {}))
     return sorted(candidate_failures - baseline_failures)
 
+
+def _primary_uncertainty(
+    task: TaskSpec,
+    baseline_analysis: dict[str, Any],
+    candidate_analysis: dict[str, Any],
+) -> float | None:
+    baseline_std = _top_trial_metric_std(task, baseline_analysis)
+    candidate_std = _top_trial_metric_std(task, candidate_analysis)
+    if baseline_std is None or candidate_std is None:
+        return None
+    return (baseline_std**2 + candidate_std**2) ** 0.5
+
+
+def _top_trial_metric_std(task: TaskSpec, analysis: dict[str, Any]) -> float | None:
+    top_trials = analysis.get("top_trials", [])
+    if not top_trials:
+        return None
+    metrics = top_trials[0].get("metrics", {})
+    std = metrics.get(f"{task.primary_metric.name}_std")
+    if std is None:
+        return None
+    return float(std)
