@@ -43,6 +43,7 @@ class RecommenderBprExecutor:
             _load_leave_last_split(self.dataset_path)
         )
         self.dataset_fingerprint = _dataset_fingerprint(self.dataset_path, self.n_users, self.n_items)
+        self.seeds = _seeds_from_task(task)
 
     def set_run_dir(self, run_dir: Path) -> None:
         self.run_dir = run_dir
@@ -59,7 +60,7 @@ class RecommenderBprExecutor:
         seed_results: list[dict[str, Any]] = []
         best_seed_model: tuple[int, np.ndarray, np.ndarray] | None = None
         best_seed_ndcg = -1.0
-        for seed in SEEDS:
+        for seed in self.seeds:
             seed_started = time.perf_counter()
             user_factors, item_factors = _train_bpr(
                 seed=seed,
@@ -105,7 +106,7 @@ class RecommenderBprExecutor:
             "train_time_sec_mean": round(train_time_sec_mean, 6),
             "train_time_sec_std": round(train_time_sec_std, 6),
             "train_time_sec_total": round(train_time_sec_total, 6),
-            "seed_count": float(len(SEEDS)),
+            "seed_count": float(len(self.seeds)),
         }
         if self.run_dir and best_seed_model:
             self._write_trial_artifacts(trial, metrics, seed_results, best_seed_model)
@@ -142,7 +143,7 @@ class RecommenderBprExecutor:
         training_log = {
             "trial_id": trial.id,
             "params": trial.params,
-            "seeds": SEEDS,
+            "seeds": self.seeds,
             "seed_results": seed_results,
             "aggregate_metrics": metrics,
             "best_seed": seed,
@@ -171,7 +172,7 @@ class RecommenderBprExecutor:
                 kind="training_log",
                 path=str(training_log_path),
                 description="Per-seed BPR training and evaluation metrics",
-                metadata={"seeds": SEEDS, "aggregate_metrics": metrics},
+                metadata={"seeds": self.seeds, "aggregate_metrics": metrics},
             ),
         )
         _append_artifact_record(
@@ -218,6 +219,16 @@ def _train_bpr(
                     regularization,
                 )
     return user_factors, item_factors
+
+
+def _seeds_from_task(task: TaskSpec) -> list[int]:
+    seeds = task.metadata.get("seeds")
+    if seeds is None:
+        return list(SEEDS)
+    parsed = [int(seed) for seed in seeds]
+    if not parsed:
+        raise ValueError("recommender_bpr metadata.seeds must not be empty")
+    return parsed
 
 
 def _load_leave_last_split(

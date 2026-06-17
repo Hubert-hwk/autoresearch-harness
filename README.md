@@ -57,6 +57,18 @@ The MovieLens raw data and converted interactions are written under
 task file and preparation script make the validation reproducible without
 checking benchmark data or generated model artifacts into the repository.
 
+Run a bounded multi-round optimization loop with:
+
+```powershell
+.\scripts\autoresearch.ps1 multi-round examples\recommender_bpr\task.json --max-rounds 2 --review-seed-count 5 --branch-mode record
+```
+
+The multi-round runner creates `runs/multi_round_<timestamp>/` with per-round
+input task snapshots, nested agentic runs, `optimization_trace.jsonl`,
+`round_summary.json`, and `report.md`. Accepted candidates are promoted as the
+next round's task. `needs_review` recommender rounds keep the same task contract
+but expand `metadata.seeds` for stronger validation before promotion.
+
 Inspect the latest agentic run, or a specific run, with:
 
 ```powershell
@@ -198,6 +210,11 @@ standard deviation as `needs_review` rather than `accept`. This keeps
 multi-seed recommender experiments from promoting changes whose observed gain
 is within measurement noise.
 
+The `multi-round` command is the first continuation layer on top of single
+agentic runs. It records each round as an auditable child run and only promotes
+candidate task artifacts after an `accept` decision. Review-worthy recommender
+changes are revalidated with more seeds instead of being silently accepted.
+
 The intended extension points are:
 
 - add real executors under `src/autoresearch_harness/adapters/`
@@ -209,6 +226,8 @@ The intended extension points are:
 ## Task Contract
 
 The MVP task contract is JSON to keep the first version dependency-free. A task
-declares the executor, dataset, budget, search space, primary metric, and
-guardrails. Scenario-specific execution logic lives in adapters, while the run
-loop and artifact protocol stay shared.
+declares the executor, dataset, budget, search space, primary metric, guardrails,
+and optional `metadata`. Scenario-specific execution logic lives in adapters,
+while the run loop and artifact protocol stay shared. The BPR recommender
+adapter uses `metadata.seeds` when present; otherwise it falls back to the
+default three-seed validation set.

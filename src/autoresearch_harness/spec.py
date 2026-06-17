@@ -24,6 +24,7 @@ def load_task(path: Path) -> TaskSpec:
         executor=data["executor"],
         dataset=dataset,
         search_space=data["search_space"],
+        metadata=dict(data.get("metadata", {})),
         budget=Budget(max_trials=int(data.get("budget", {}).get("max_trials", 20))),
         primary_metric=_metric_goal(primary),
         guardrail_metrics=[_metric_goal(item) for item in guardrails],
@@ -36,6 +37,7 @@ def task_to_dict(task: TaskSpec) -> dict[str, Any]:
         "objective": task.objective,
         "executor": task.executor,
         "dataset": task.dataset,
+        "metadata": task.metadata,
         "search_space": task.search_space,
         "budget": {"max_trials": task.budget.max_trials},
         "metrics": {
@@ -52,4 +54,3 @@ def _metric_goal(data: dict[str, Any]) -> MetricGoal:
         min_value=data.get("min"),
         max_value=data.get("max"),
     )
-

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .agentic import resume_agentic_research, run_agentic_research
+from .multiround import run_multi_round_research
 from .registry import load_research_status
 from .runner import run_task
 from .spec import load_task
@@ -25,6 +26,16 @@ def main(argv: list[str] | None = None) -> int:
     research_parser.add_argument("--repo-root", type=Path, default=Path("."))
     research_parser.add_argument("--branch-mode", choices=["record", "create"], default="record")
     research_parser.add_argument("--agent", choices=["rule", "llm"], default="rule")
+
+    multi_parser = subparsers.add_parser("multi-round", help="run a multi-round agentic research loop")
+    multi_parser.add_argument("task", type=Path)
+    multi_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    multi_parser.add_argument("--memory-dir", type=Path, default=Path("memory"))
+    multi_parser.add_argument("--repo-root", type=Path, default=Path("."))
+    multi_parser.add_argument("--branch-mode", choices=["record", "create"], default="record")
+    multi_parser.add_argument("--agent", choices=["rule", "llm"], default="rule")
+    multi_parser.add_argument("--max-rounds", type=int, default=3)
+    multi_parser.add_argument("--review-seed-count", type=int, default=5)
 
     status_parser = subparsers.add_parser("status", help="show a prior agentic research run")
     status_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
@@ -92,6 +103,24 @@ def main(argv: list[str] | None = None) -> int:
             print(f"artifacts={len(status['artifacts'])}")
             print(f"provenance={len(status['provenance'])}")
             print(f"decision_evidence={len(state.get('decision_evidence', []))}")
+        return 0
+
+    if args.command == "multi-round":
+        task = load_task(args.task)
+        result = run_multi_round_research(
+            task=task,
+            runs_dir=args.runs_dir,
+            repo_root=args.repo_root.resolve(),
+            memory_dir=args.memory_dir,
+            branch_mode=args.branch_mode,
+            agent_kind=args.agent,
+            max_rounds=args.max_rounds,
+            review_seed_count=args.review_seed_count,
+        )
+        print(f"multi_round_id={result['multi_round_id']}")
+        print(f"rounds_completed={result['rounds_completed']}")
+        print(f"final_decision={result['final_decision']}")
+        print(f"stop_reason={result['stop_reason']}")
         return 0
 
     if args.command == "resume":

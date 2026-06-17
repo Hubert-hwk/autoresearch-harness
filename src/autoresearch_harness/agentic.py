@@ -763,6 +763,7 @@ def _task_from_state(state: dict[str, Any]) -> TaskSpec:
         objective=task["objective"],
         executor=task["executor"],
         dataset=task.get("dataset"),
+        metadata=dict(task.get("metadata", {})),
         search_space=task["search_space"],
         budget=Budget(max_trials=int(task["budget"]["max_trials"])),
         primary_metric=_metric_goal_from_dict(metrics["primary"]),

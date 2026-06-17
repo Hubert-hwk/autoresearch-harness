@@ -24,6 +24,7 @@ class TaskSpec:
     executor: str
     search_space: dict[str, dict[str, Any]]
     dataset: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     budget: Budget = field(default_factory=Budget)
     primary_metric: MetricGoal = field(default_factory=lambda: MetricGoal("score"))
     guardrail_metrics: list[MetricGoal] = field(default_factory=list)
@@ -51,4 +52,3 @@ class RunSummary:
     total_trials: int
     best_result: TrialResult | None
     stop_reason: str
-

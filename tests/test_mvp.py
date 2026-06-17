@@ -21,6 +21,7 @@ from autoresearch_harness.hypothesis import Hypothesis
 from autoresearch_harness.llm import LLMMessage
 from autoresearch_harness.memory import MemoryManager
 from autoresearch_harness.memory_index import build_memory_context
+from autoresearch_harness.multiround import run_multi_round_research
 from autoresearch_harness.mutation import apply_mutation_plan, build_mutation_plan
 from autoresearch_harness.mutation import materialize_mutation_artifact
 from autoresearch_harness.policy import generate_trials
@@ -194,6 +195,35 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertTrue(any("model_artifact" in item for item in provenance_ids))
             self.assertTrue(any("training_log" in item for item in provenance_ids))
             self.assertTrue(any("dataset_fingerprint" in item for item in provenance_ids))
+
+    def test_multi_round_research_expands_recommender_validation_after_review(self) -> None:
+        task = load_task(ROOT / "examples" / "recommender_bpr" / "task.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = run_multi_round_research(
+                task=task,
+                runs_dir=root / "runs",
+                repo_root=ROOT,
+                memory_dir=root / "memory",
+                branch_mode="record",
+                max_rounds=2,
+                review_seed_count=5,
+            )
+            multi_round_dir = Path(result["paths"]["multi_round_dir"])
+            second_task = json.loads(
+                (multi_round_dir / "round_002" / "input_task.json").read_text(encoding="utf-8")
+            )
+            trace_lines = (multi_round_dir / "optimization_trace.jsonl").read_text(
+                encoding="utf-8"
+            ).splitlines()
+
+            self.assertEqual(2, result["rounds_completed"])
+            self.assertEqual("max_rounds_exhausted_pending_revalidation", result["stop_reason"])
+            self.assertEqual("needs_review", result["trace"][0]["decision"])
+            self.assertEqual([20260612, 20260613, 20260614, 20260615, 20260616], second_task["metadata"]["seeds"])
+            self.assertEqual(2, len(trace_lines))
+            self.assertTrue((multi_round_dir / "round_summary.json").exists())
+            self.assertTrue((multi_round_dir / "report.md").exists())
 
     def test_movielens_100k_preparation_converts_raw_data_without_committing_dataset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
