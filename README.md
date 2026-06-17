@@ -45,6 +45,18 @@ Run the NumPy BPR recommender example with:
 python -m autoresearch_harness research examples\recommender_bpr\task.json --branch-mode record
 ```
 
+Prepare and run the larger MovieLens 100K BPR validation pack with:
+
+```powershell
+python scripts\prepare_movielens_100k.py
+python -m autoresearch_harness research examples\recommender_movielens_100k\task.json --branch-mode record
+```
+
+The MovieLens raw data and converted interactions are written under
+`data/external/ml-100k/`, which is intentionally ignored by git. The committed
+task file and preparation script make the validation reproducible without
+checking benchmark data or generated model artifacts into the repository.
+
 Inspect the latest agentic run, or a specific run, with:
 
 ```powershell
@@ -123,6 +135,8 @@ The included adapters are:
   loop
   with three-seed aggregate metrics, model artifacts, training logs, and dataset
   fingerprints
+- `examples/recommender_movielens_100k`: a larger standard benchmark validation
+  pack using the same BPR adapter on MovieLens 100K prepared outside the repo
 
 Together they demonstrate that the harness protocol is not tied to one
 business scenario.

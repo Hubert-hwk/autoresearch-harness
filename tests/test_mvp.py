@@ -15,6 +15,7 @@ from autoresearch_harness.branching import BranchRecord
 from autoresearch_harness.branching import advance_branch_lifecycle
 from autoresearch_harness.branching import complete_branch_lifecycle
 from autoresearch_harness.branching import start_branch_lifecycle
+from autoresearch_harness.datasets.movielens import prepare_movielens_100k
 from autoresearch_harness.decision import make_decision
 from autoresearch_harness.hypothesis import Hypothesis
 from autoresearch_harness.llm import LLMMessage
@@ -184,6 +185,44 @@ class MvpHarnessTest(unittest.TestCase):
             self.assertTrue(any("model_artifact" in item for item in provenance_ids))
             self.assertTrue(any("training_log" in item for item in provenance_ids))
             self.assertTrue(any("dataset_fingerprint" in item for item in provenance_ids))
+
+    def test_movielens_100k_preparation_converts_raw_data_without_committing_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw_dir = root / "external" / "ml-100k" / "raw" / "ml-100k"
+            raw_dir.mkdir(parents=True)
+            (raw_dir / "u.data").write_text(
+                "\n".join(
+                    [
+                        "1\t10\t5\t100",
+                        "1\t11\t3\t101",
+                        "2\t10\t4\t102",
+                        "3\t12\t5\t103",
+                    ]
+                )
+                + "\n",
+                encoding="latin-1",
+            )
+
+            prepared = prepare_movielens_100k(root / "external", download=False)
+            interactions = Path(prepared.output_path).read_text(encoding="utf-8").splitlines()
+
+            self.assertEqual("movielens_100k", prepared.dataset)
+            self.assertEqual(3, prepared.rows)
+            self.assertEqual(3, prepared.n_users)
+            self.assertEqual(2, prepared.n_items)
+            self.assertEqual("user_id,item_id,timestamp", interactions[0])
+            self.assertIn("1,10,100", interactions)
+            self.assertNotIn("1,11,101", interactions)
+            self.assertTrue(Path(prepared.summary_path).exists())
+
+            stricter = prepare_movielens_100k(root / "external", min_rating=5, download=False)
+            stricter_interactions = Path(stricter.output_path).read_text(encoding="utf-8").splitlines()
+
+            self.assertEqual(5, stricter.min_rating)
+            self.assertEqual(2, stricter.rows)
+            self.assertIn("1,10,100", stricter_interactions)
+            self.assertNotIn("2,10,102", stricter_interactions)
 
     def test_mutation_plan_validates_search_space_subset_and_materializes_diff(self) -> None:
         task = load_task(ROOT / "examples" / "model_param_tuning" / "task.json")
