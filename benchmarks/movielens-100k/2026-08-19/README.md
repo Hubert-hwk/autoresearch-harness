@@ -41,7 +41,7 @@ regularization=0.001, and one negative sample. The only difference is 3 versus
 | NDCG@10 | 0.033580 | 0.038026 | +0.004446 |
 | HitRate@10 | 0.062420 | 0.074098 | +0.011677 |
 | Coverage@10 | 0.135867 | 0.088321 | -0.047546 |
-| Training time | 3.327 s | 6.533 s | +3.206 s |
+| Training time | 3.340 s | 6.635 s | +3.295 s |
 
 - Paired NDCG improvements:
   `[0.011130, 0.003042, 0.004710, -0.000680, 0.004027]`
@@ -52,7 +52,7 @@ regularization=0.001, and one negative sample. The only difference is 3 versus
 - Replay: `matched`, 10 trials, 0 mismatches
 
 The candidate is promoted only under the declared contract. Catalog coverage
-fell 34.99%, and training time rose 96.37%. Coverage was observable but not a
+fell 34.99%, and training time rose 98.66%. Coverage was observable but not a
 gate in this protocol; a follow-up protocol should treat coverage as a paired
 non-regression gate if catalog breadth is a product requirement.
 
@@ -76,3 +76,5 @@ autoresearch replay \
 Machine-readable observations and source evidence hashes are in
 [`summary.json`](summary.json). Runtime values are machine-dependent and are
 not replay comparison metrics; ranking metrics, coverage, and seed counts are.
+The recorded verification was executed from clean commit
+`dfdf496d988467375982dcdc90d444948f424252`.

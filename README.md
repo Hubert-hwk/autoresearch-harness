@@ -63,7 +63,7 @@ with zero metric mismatches.
 | NDCG@10 | 0.033580 | 0.038026 | +0.004446 (+13.24%) |
 | HitRate@10 | 0.062420 | 0.074098 | +0.011677 |
 | Catalog coverage@10 | 0.135867 | 0.088321 | −0.047546 (−34.99%) |
-| Mean training time | 3.327 s | 6.533 s | +96.37% |
+| Mean training time | 3.340 s | 6.635 s | +98.66% |
 
 The paired NDCG@10 improvement had a 95% bootstrap interval of
 `[+0.001339, +0.008228]`, above the declared `+0.001` promotion threshold.

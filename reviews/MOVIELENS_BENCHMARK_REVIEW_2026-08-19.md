@@ -16,7 +16,9 @@ published.
 - Paired improvement: +0.0044458; 95% CI [0.0013394, 0.0082284].
 - Decision: `promote` under the predeclared +0.001 and guardrail gates.
 - Replay: matched, no drift, no mismatches.
-- Regression disclosed: coverage -34.99%; mean training time +96.37%.
+- Regression disclosed: coverage -34.99%; mean training time +98.66% on the
+  clean-commit evidence run.
+- Evidence anchor: clean commit `dfdf496d988467375982dcdc90d444948f424252`.
 
 ## Defect review
 

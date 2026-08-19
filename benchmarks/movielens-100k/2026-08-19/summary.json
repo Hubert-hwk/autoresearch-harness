@@ -30,7 +30,7 @@
       "ndcg_at_10": 0.03358,
       "hit_rate_at_10": 0.0624204,
       "coverage_at_10": 0.1358672,
-      "train_time_sec": 3.3270832
+      "train_time_sec": 3.3400236
     }
   },
   "candidate": {
@@ -45,7 +45,7 @@
       "ndcg_at_10": 0.0380258,
       "hit_rate_at_10": 0.0740976,
       "coverage_at_10": 0.0883208,
-      "train_time_sec": 6.5332522
+      "train_time_sec": 6.635194
     }
   },
   "paired_ndcg_improvements": [
@@ -73,10 +73,12 @@
     "drift_components": []
   },
   "source_evidence": {
-    "fingerprint_id": "f49a0ae2a84518c6a5d883ff14808aec776c5cddf988c6463b7aad0a5e62a198",
-    "verification_result_sha256": "ce9f44507d14af6f21f4d2092741ef5c11c7875d9408605e8e14c60207569e74",
-    "replay_manifest_sha256": "9c9f115e496bedcb3dc1f0b1efb33c352ba015c314a32c42f99b88b0c7284ce6",
-    "replay_result_sha256": "c845b5fce707a5135e707538006ed5036d799657aac813a23e5b9c4759f93f95"
+    "git_commit": "dfdf496d988467375982dcdc90d444948f424252",
+    "git_dirty": false,
+    "fingerprint_id": "5ece0971e70e113d59673b84d8423b7919229781b5ce1ec38d83430615dbc7d9",
+    "verification_result_sha256": "f050f7ea4924c239746379174ada301ffe5f559ad6d08be5f60ae14917f91d21",
+    "replay_manifest_sha256": "9bf4c5189bc2e8e8075ecff6b5d4b345a5024f83a6c2fa3e74b5dedbcd3a53db",
+    "replay_result_sha256": "36410ab22755f2307ef5d349a868cb7ff7a9662a2a64ad0b98eac592ebb731e2"
   },
   "limitations": [
     "Candidate uses twice the training epochs.",
