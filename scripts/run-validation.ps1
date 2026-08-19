@@ -15,6 +15,9 @@ Set-Location $repoRoot
 & $python -m autoresearch_harness run examples\prompt_tuning\task.json
 & $python -m autoresearch_harness run examples\model_param_tuning\task.json
 & $python -m autoresearch_harness run examples\recommender_bpr\task.json
+& $python -m autoresearch_harness run examples\external_command\task.json
+& $python -m autoresearch_harness adaptive-run examples\external_command\task.json --repo-root .
+& $python -m autoresearch_harness verify-run examples\external_command\task.json examples\external_command\baseline_params.json examples\external_command\candidate_params.json --repo-root .
 & $python -m autoresearch_harness research examples\prompt_tuning\task.json --branch-mode record
 & $python -m autoresearch_harness research examples\model_param_tuning\task.json --branch-mode record
 & $python -m autoresearch_harness research examples\recommender_bpr\task.json --branch-mode record

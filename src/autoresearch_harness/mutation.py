@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .hypothesis import Hypothesis
-from .models import Budget, TaskSpec
+from .models import TaskSpec
 from .spec import task_to_dict
 
 
@@ -59,7 +59,7 @@ def build_mutation_plan(task: TaskSpec, hypothesis: Hypothesis) -> MutationPlan:
         protocol_version="mutation.v1",
         operations=operations,
         candidate_search_space=candidate_search_space,
-        candidate_budget=_search_space_size(candidate_search_space),
+        candidate_budget=min(task.budget.max_trials, _search_space_size(candidate_search_space)),
         safety_checks=[
             "candidate_search_space_is_subset_of_task",
             "mutation_operations_are_declarative",
@@ -73,7 +73,7 @@ def apply_mutation_plan(task: TaskSpec, plan: MutationPlan) -> TaskSpec:
         task,
         name=f"{task.name}_agentic_candidate",
         search_space=plan.candidate_search_space,
-        budget=Budget(max_trials=plan.candidate_budget),
+        budget=replace(task.budget, max_trials=plan.candidate_budget),
     )
 
 

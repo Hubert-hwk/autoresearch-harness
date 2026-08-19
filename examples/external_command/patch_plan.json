@@ -1,0 +1,14 @@
+{
+  "protocol_version": "patch.v1",
+  "id": "increase-context-weight",
+  "rationale": "Test whether additional context weight preserves accuracy under the false-positive guardrail.",
+  "operations": [
+    {
+      "op": "replace_text",
+      "path": "examples/external_command/evaluate.py",
+      "old": "float(row[\"context\"]) * 0.2",
+      "new": "float(row[\"context\"]) * 0.25",
+      "expected_replacements": 1
+    }
+  ]
+}

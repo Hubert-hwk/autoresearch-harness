@@ -209,52 +209,108 @@ Current Git state:
 - GitHub remote exists: `https://github.com/Hubert-hwk/autoresearch-harness`
 - GitHub Actions CI runs compile and unit-test validation
 
+## v0.3 Implementation Update
+
+The August 2026 literature review selected an auditable empirical software
+optimization engine as the next system direction. See `ROADMAP_V03.md` and
+`research/RESEARCH_DIRECTION_2026.md`.
+
+Phase 1 of v0.3 now provides a versioned `task.v2` contract and an
+`external_command` executor. It executes trusted command arrays without shell
+interpolation, applies per-trial timeouts, parses machine-readable metrics, and
+records stdout, stderr, execution manifests, declared artifacts, and hashes.
+Existing `task.v1` examples remain compatible.
+
+Phase 2 adds a task-declared editable-path policy, the typed `patch.v1`
+protocol, and `patch-run`. Patch candidates run in detached Git worktrees tied
+to a resolved base commit without switching the active branch. Validation is
+atomic, path and size constrained, and limited to UTF-8 `replace_text` plus
+opt-in `create_file`. Pre/post evaluation audits reject any changed path or
+file hash not explained by the patch. Workspaces and failure evidence are
+retained for inspection. This is source-worktree isolation, not an OS security
+sandbox.
+
+Phase 3 adds `experiment_graph.py`. Its append-only, SHA-256 hash-chained event
+stream is the durable source for frozen `ExperimentNode` views. Rebuild checks
+event order, ids, graph identity, hashes, parent availability, and lifecycle
+transitions. Nodes retain lineage, hypotheses, mutations, base commits,
+workspaces, fidelity, consumed budget, evaluations, feedback, decisions, and
+artifact references. `patch-run` records its lifecycle automatically and can
+join a shared graph with explicit parent nodes. `graph-status` validates and
+rebuilds the derived graph snapshot. The graph is currently single-writer;
+the adaptive scheduler uses it sequentially, and writer coordination remains a
+future execution-backend milestone.
+
+Phase 4 adds `scheduling.v1` and `adaptive-run`. Initial candidates are sampled
+without replacement from finite grid positions using a fixed seed. Successive
+Halving promotes guardrail-passing candidates by the primary objective while a
+direction-aware Pareto archive retains nondominated results at each fidelity.
+Global trial, cumulative-fidelity, and wall-time budgets are checked before
+every evaluation; external subprocess timeouts are clipped to remaining wall
+time. Every fidelity observation is an experiment node, with promoted
+higher-fidelity observations pointing to lower-fidelity parents. Unexpected
+executor exceptions are stored as failed trial evidence. The Phase 4 review
+and residual limitations are in `reviews/PHASE4_REVIEW_2026-08-19.md`.
+
+Phase 5 adds `verification.v1`, `fingerprint.v1`, `replay.v1`, `verify-run`, and
+`replay`. Verification executes alternating baseline/candidate order over
+paired seeds and uses deterministic bootstrap confidence intervals. Promotion
+requires complete pairs, a confidence lower bound above the declared effect
+floor, candidate guardrail compliance, and stable fingerprints. Fingerprints
+cover the semantic task, dataset, evaluator dependencies, harness source,
+Python/packages, selected runtime settings, platform, and Git state. Replay
+manifests are content-hashed; default replay blocks on drift, compares declared
+scientific metrics within tolerance, observes global budgets, and detects
+fingerprint changes during execution. Review details are in
+`reviews/PHASE5_REVIEW_2026-08-19.md`.
+
+Phase 6 adds `evidence-memory.v1` and the `memory-ingest`, `memory-query`,
+`memory-status`, and `memory-invalidate` commands. Durable claims require a
+complete verification and matched replay, retain copied evidence bundles, and
+carry typed effects, applicability scope, validity, and supersession metadata.
+The event log is append-only and hash-chained; queries revalidate evidence and
+exclude inactive, expired, corrupted, or out-of-scope claims. The agentic
+planner consumes matching evidence memory without treating legacy exploratory
+lessons as verified facts. Review details are in
+`reviews/PHASE6_REVIEW_2026-08-19.md`.
+
 ## Gap To Desired System
 
-The current project is a validated MVP, but it is still far from the intended
-agentic AutoResearch harness.
+The current project is a validated prototype, but it is still short of the
+intended applied AutoResearch harness.
 
 Missing major capabilities:
 
-- LLM-backed or model-backed `ResearchAgent` that proposes optimization
-  directions from objectives, context, metrics, history, and failures
 - richer provider-specific LLM clients and prompt templates
-- richer `Hypothesis` planning with code/config/prompt mutations beyond the
-  current safe search-space mutation protocol
-- richer `MemoryManager` retrieval over successful patterns, failure patterns,
-  bad cases, domain notes, and semantic similarity beyond the current rule
-  based memory index
-- full branch lifecycle with trial commits, worktree patch application,
-  rollback, remote branch push, and optional PR creation
-- stronger `EffectEvaluator` with confidence, regressions, and statistical
-  comparison
-- `DecisionEngine`: accept, reject, retry, mutate, expand search, or stop
-- `RunRegistry`: multi-run comparison, resume, replay, and run lineage
-- stronger resume safety checks, such as command fingerprints, environment
-  fingerprints, and duplicate memory-write prevention
-- real business executors instead of deterministic simulations
+- structural syntax-aware code patches and binary mutations
+- OS/container sandboxing for untrusted command-backed experiments
+- asynchronous/concurrent scheduling and coordinated multi-writer graph access
+- advanced sequential tests, multiple-comparison correction, and BCa intervals
+- signed provenance and remote attestation for replay evidence
+- stronger resume safety checks beyond the existing execution fingerprints
 - release discipline and richer documentation
 
 ## Next Engineering Milestone
 
-Build `v0.3 applied research integration`.
+Stabilize and package the completed `v0.3 Applied Research Execution Core`.
 
-Preferred first implementation:
+Implementation order:
 
-1. Add a real mutation interface for code/config/prompt changes beyond task
-   artifact materialization.
-2. Capture optional trial commits per hypothesis.
-3. Continue strengthening memory retrieval beyond the current lightweight
-   relevance index, especially supporting trials and failure patterns.
-4. Add one semi-real executor, such as prompt eval against a real model or a
-   business offline-eval command adapter.
-5. Expand GitHub CI beyond unit tests when real executors are available.
+1. Add cross-process writer coordination for event stores.
+2. Add signed provenance or remote attestation where trust boundaries require it.
+3. Strengthen sequential statistics and multiple-comparison control.
+4. Add OS/container isolation for untrusted evaluators.
+5. Establish release, migration, and compatibility discipline.
 
 This should be implemented incrementally, with each step validated locally and
 pushed after tests pass.
 
 ## Engineering Principles
 
+- After every development session, write a local Markdown log under
+  `dev-logs/` covering date, background, what happened, what changed, and the
+  observed effect. The directory is intentionally Git-ignored and must not be
+  included in commits or pushes.
 - Keep the harness generic; avoid baking one business scenario into the core.
 - Put scenario-specific behavior behind adapters.
 - Preserve traceability for every recommendation.

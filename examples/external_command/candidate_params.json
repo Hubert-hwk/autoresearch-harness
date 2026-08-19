@@ -1,0 +1,5 @@
+{
+  "threshold": 0.55,
+  "signal_weight": 1.0,
+  "bias": -0.05
+}

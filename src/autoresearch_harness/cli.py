@@ -4,11 +4,21 @@ import argparse
 import json
 from pathlib import Path
 
+from .adaptive import run_adaptive_task
+from .applied import run_patch_experiment
+from .experiment_graph import rebuild_experiment_graph
+from .evidence_memory import (
+    EvidenceMemoryStore,
+    ingest_verification_memory,
+    query_evidence_memory,
+)
 from .agentic import resume_agentic_research, run_agentic_research
 from .multiround import run_multi_round_research
+from .patching import load_patch_plan
 from .registry import load_research_status
 from .runner import run_task
 from .spec import load_task
+from .verification import load_parameter_set, replay_verification, run_verification
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -18,6 +28,89 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = subparsers.add_parser("run", help="run an autoresearch task")
     run_parser.add_argument("task", type=Path)
     run_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+
+    adaptive_parser = subparsers.add_parser(
+        "adaptive-run",
+        help="run deterministic successive halving with global budgets",
+    )
+    adaptive_parser.add_argument("task", type=Path)
+    adaptive_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    adaptive_parser.add_argument("--repo-root", type=Path, default=Path("."))
+
+    verify_parser = subparsers.add_parser(
+        "verify-run",
+        help="run paired repeated-seed verification and independent promotion gates",
+    )
+    verify_parser.add_argument("task", type=Path)
+    verify_parser.add_argument("baseline_params", type=Path)
+    verify_parser.add_argument("candidate_params", type=Path)
+    verify_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    verify_parser.add_argument("--repo-root", type=Path, default=Path("."))
+
+    replay_parser = subparsers.add_parser(
+        "replay",
+        help="replay a verification manifest after fingerprint validation",
+    )
+    replay_parser.add_argument("manifest_or_dir", type=Path)
+    replay_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    replay_parser.add_argument("--allow-drift", action="store_true")
+
+    memory_ingest_parser = subparsers.add_parser(
+        "memory-ingest",
+        help="ingest a verified and replayed result into durable evidence memory",
+    )
+    memory_ingest_parser.add_argument("verification_dir", type=Path)
+    memory_ingest_parser.add_argument("replay_result", type=Path)
+    memory_ingest_parser.add_argument("--memory-dir", type=Path, default=Path("memory"))
+    memory_ingest_parser.add_argument("--supersedes", action="append", default=[])
+    memory_ingest_parser.add_argument("--valid-days", type=float)
+
+    memory_query_parser = subparsers.add_parser(
+        "memory-query",
+        help="query active evidence memory under the current task scope",
+    )
+    memory_query_parser.add_argument("task", type=Path)
+    memory_query_parser.add_argument("--memory-dir", type=Path, default=Path("memory"))
+    memory_query_parser.add_argument("--repo-root", type=Path, default=Path("."))
+    memory_query_parser.add_argument("--limit", type=int, default=10)
+    memory_query_parser.add_argument("--json", action="store_true")
+
+    memory_invalidate_parser = subparsers.add_parser(
+        "memory-invalidate",
+        help="invalidate an active evidence memory with an append-only event",
+    )
+    memory_invalidate_parser.add_argument("memory_id")
+    memory_invalidate_parser.add_argument("--reason", required=True)
+    memory_invalidate_parser.add_argument("--memory-dir", type=Path, default=Path("memory"))
+
+    memory_status_parser = subparsers.add_parser(
+        "memory-status",
+        help="validate and rebuild the evidence memory snapshot",
+    )
+    memory_status_parser.add_argument("--memory-dir", type=Path, default=Path("memory"))
+    memory_status_parser.add_argument("--json", action="store_true")
+
+    patch_parser = subparsers.add_parser(
+        "patch-run",
+        help="apply a typed patch in a detached worktree and evaluate it",
+    )
+    patch_parser.add_argument("task", type=Path)
+    patch_parser.add_argument("patch_plan", type=Path)
+    patch_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    patch_parser.add_argument("--workspaces-dir", type=Path, default=Path("runs/worktrees"))
+    patch_parser.add_argument("--repo-root", type=Path, default=Path("."))
+    patch_parser.add_argument("--base-commit", default="HEAD")
+    patch_parser.add_argument("--graph-dir", type=Path)
+    patch_parser.add_argument("--graph-id")
+    patch_parser.add_argument("--node-id")
+    patch_parser.add_argument("--parent-node", action="append", default=[])
+
+    graph_parser = subparsers.add_parser(
+        "graph-status",
+        help="validate event integrity and rebuild an experiment graph view",
+    )
+    graph_parser.add_argument("graph_dir", type=Path)
+    graph_parser.add_argument("--json", action="store_true")
 
     research_parser = subparsers.add_parser("research", help="run an agentic research loop")
     research_parser.add_argument("task", type=Path)
@@ -63,6 +156,146 @@ def main(argv: list[str] | None = None) -> int:
             print(f"best_params={best.params}")
         else:
             print("best_trial=None")
+        return 0
+
+    if args.command == "adaptive-run":
+        result = run_adaptive_task(
+            load_task(args.task),
+            args.runs_dir,
+            repo_root=args.repo_root.resolve(),
+        )
+        print(f"run_id={result['run_id']}")
+        print(f"stop_reason={result['stop_reason']}")
+        print(f"budget_usage={result['budget_usage']}")
+        print(
+            "pareto_candidates="
+            f"{result['pareto_archive']['final_candidate_ids']}"
+        )
+        print(f"best_result={result['best_result']}")
+        return 0
+
+    if args.command == "verify-run":
+        result = run_verification(
+            load_task(args.task),
+            load_parameter_set(args.baseline_params),
+            load_parameter_set(args.candidate_params),
+            args.runs_dir,
+            repo_root=args.repo_root.resolve(),
+        )
+        interval = result["statistics"]["paired_interval"]
+        print(f"verification_id={result['verification_id']}")
+        print(f"decision={result['decision']['decision']}")
+        print(f"stop_reason={result['stop_reason']}")
+        print(f"fingerprint_id={result['fingerprint_id']}")
+        print(f"paired_interval={interval}")
+        print(f"replay_manifest={result['paths']['replay_manifest']}")
+        return 0
+
+    if args.command == "replay":
+        result = replay_verification(
+            args.manifest_or_dir,
+            args.runs_dir,
+            allow_drift=args.allow_drift,
+        )
+        print(f"replay_id={result['replay_id']}")
+        print(f"status={result['status']}")
+        print(f"matched={result['matched']}")
+        print(f"drift_components={result['drift_components']}")
+        print(f"mismatches={len(result['mismatches'])}")
+        return 0
+
+    if args.command == "memory-ingest":
+        memory = ingest_verification_memory(
+            args.verification_dir,
+            args.replay_result,
+            args.memory_dir,
+            supersedes=args.supersedes,
+            valid_days=args.valid_days,
+        )
+        print(f"memory_id={memory['memory_id']}")
+        print(f"claim_type={memory['claim_type']}")
+        print(f"status={memory['validity']['status']}")
+        return 0
+
+    if args.command == "memory-query":
+        result = query_evidence_memory(
+            load_task(args.task),
+            args.memory_dir,
+            repo_root=args.repo_root.resolve(),
+            limit=args.limit,
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"total_memories={result['total_memories']}")
+            print(f"matched={len(result['matched'])}")
+            for match in result["matched"]:
+                print(
+                    f"memory={match['memory_id']} score={match['score']} "
+                    f"claim_type={match['memory']['claim_type']}"
+                )
+        return 0
+
+    if args.command == "memory-invalidate":
+        memory = EvidenceMemoryStore(args.memory_dir).invalidate(
+            args.memory_id,
+            args.reason,
+        )
+        print(f"memory_id={memory['memory_id']}")
+        print(f"status={memory['validity']['status']}")
+        return 0
+
+    if args.command == "memory-status":
+        snapshot = EvidenceMemoryStore(args.memory_dir).snapshot()
+        if args.json:
+            print(json.dumps(snapshot, ensure_ascii=False, indent=2))
+        else:
+            statuses: dict[str, int] = {}
+            for memory in snapshot["memories"]:
+                status = memory["validity"]["status"]
+                statuses[status] = statuses.get(status, 0) + 1
+            print(f"events={snapshot['event_count']}")
+            print(f"head_event_hash={snapshot['head_event_hash']}")
+            print(f"memories={len(snapshot['memories'])}")
+            print(f"statuses={statuses}")
+        return 0
+
+    if args.command == "patch-run":
+        task = load_task(args.task)
+        patch_plan = load_patch_plan(args.patch_plan)
+        result = run_patch_experiment(
+            task,
+            patch_plan,
+            repo_root=args.repo_root.resolve(),
+            runs_dir=args.runs_dir,
+            workspaces_dir=args.workspaces_dir,
+            base_commit=args.base_commit,
+            graph_dir=args.graph_dir,
+            graph_id=args.graph_id,
+            node_id=args.node_id,
+            parent_node_ids=args.parent_node,
+        )
+        print(f"experiment_id={result['experiment_id']}")
+        print(f"base_commit={result['base_commit']}")
+        print(f"workspace={result['workspace']['workspace_path']}")
+        print(f"candidate_run_id={result['candidate_run_id']}")
+        print(f"best_result={result['candidate']['best_result']}")
+        return 0
+
+    if args.command == "graph-status":
+        snapshot = rebuild_experiment_graph(args.graph_dir)
+        if args.json:
+            print(json.dumps(snapshot, ensure_ascii=False, indent=2))
+        else:
+            print(f"graph_id={snapshot['graph_id']}")
+            print(f"events={snapshot['event_count']}")
+            print(f"head_event_hash={snapshot['head_event_hash']}")
+            print(f"nodes={len(snapshot['nodes'])}")
+            for node in snapshot["nodes"]:
+                print(
+                    f"node={node['node_id']} status={node['status']} "
+                    f"parents={','.join(node['parent_ids']) or '-'}"
+                )
         return 0
 
     if args.command == "research":

@@ -63,6 +63,10 @@ def compact_memory_context(memory_context: dict[str, Any]) -> dict[str, Any]:
             }
             for match in memory_context.get("matches", [])
         ],
+        "evidence_memory": memory_context.get(
+            "evidence_memory",
+            {"total_memories": 0, "matched_memories": 0, "memory_ids": []},
+        ),
     }
 
 
