@@ -1,6 +1,4 @@
 <div align="center">
-  <img src="assets/autoresearch-hero.svg" width="920" alt="autoresearch-harness — auditable empirical optimization" />
-
   <h1>autoresearch-harness</h1>
 
   <p><strong>Turn an optimization idea into bounded experiments, replayable evidence, and a promotion decision.</strong></p>
@@ -12,6 +10,8 @@
     <img src="https://img.shields.io/badge/tests-43%20passing-0ea5e9?style=flat-square" alt="43 tests passing" />
     <a href="https://github.com/Hubert-hwk/autoresearch-harness/stargazers"><img src="https://img.shields.io/github/stars/Hubert-hwk/autoresearch-harness?style=flat-square" alt="GitHub stars" /></a>
   </p>
+
+  <img src="assets/autoresearch-method-overview.png" width="960" alt="Six-step autoresearch workflow from a versioned task through bounded search, isolated execution, experiment lineage, verification and replay, to validity-aware evidence memory; failures and drift remain retained evidence." />
 
   <p>
     <a href="#quick-start">Quick Start</a> ·
