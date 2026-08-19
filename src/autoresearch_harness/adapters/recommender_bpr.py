@@ -51,6 +51,7 @@ class RecommenderBprExecutor:
     def run(self, trial: Trial) -> TrialResult:
         started = time.perf_counter()
         params = trial.params
+        seeds = self._seeds_for_trial(params)
         factors = int(params["factors"])
         learning_rate = float(params["learning_rate"])
         regularization = float(params["regularization"])
@@ -60,7 +61,7 @@ class RecommenderBprExecutor:
         seed_results: list[dict[str, Any]] = []
         best_seed_model: tuple[int, np.ndarray, np.ndarray] | None = None
         best_seed_ndcg = -1.0
-        for seed in self.seeds:
+        for seed in seeds:
             seed_started = time.perf_counter()
             user_factors, item_factors = _train_bpr(
                 seed=seed,
@@ -106,10 +107,10 @@ class RecommenderBprExecutor:
             "train_time_sec_mean": round(train_time_sec_mean, 6),
             "train_time_sec_std": round(train_time_sec_std, 6),
             "train_time_sec_total": round(train_time_sec_total, 6),
-            "seed_count": float(len(self.seeds)),
+            "seed_count": float(len(seeds)),
         }
         if self.run_dir and best_seed_model:
-            self._write_trial_artifacts(trial, metrics, seed_results, best_seed_model)
+            self._write_trial_artifacts(trial, metrics, seed_results, best_seed_model, seeds)
         passed, notes = passes_guardrails(self.task, metrics)
         return TrialResult(
             trial_id=trial.id,
@@ -119,12 +120,25 @@ class RecommenderBprExecutor:
             notes=notes,
         )
 
+    def _seeds_for_trial(self, params: dict[str, Any]) -> list[int]:
+        policy = self.task.verification
+        if policy is not None and policy.seed_parameter in params:
+            value = params[policy.seed_parameter]
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(
+                    f"recommender_bpr verification seed {policy.seed_parameter!r} "
+                    "must be an integer"
+                )
+            return [value]
+        return list(self.seeds)
+
     def _write_trial_artifacts(
         self,
         trial: Trial,
         metrics: dict[str, float],
         seed_results: list[dict[str, Any]],
         best_seed_model: tuple[int, np.ndarray, np.ndarray],
+        seeds: list[int],
     ) -> None:
         assert self.run_dir is not None
         artifact_dir = self.run_dir / "executor_artifacts" / trial.id
@@ -143,7 +157,7 @@ class RecommenderBprExecutor:
         training_log = {
             "trial_id": trial.id,
             "params": trial.params,
-            "seeds": self.seeds,
+            "seeds": seeds,
             "seed_results": seed_results,
             "aggregate_metrics": metrics,
             "best_seed": seed,
@@ -172,7 +186,7 @@ class RecommenderBprExecutor:
                 kind="training_log",
                 path=str(training_log_path),
                 description="Per-seed BPR training and evaluation metrics",
-                metadata={"seeds": self.seeds, "aggregate_metrics": metrics},
+                metadata={"seeds": seeds, "aggregate_metrics": metrics},
             ),
         )
         _append_artifact_record(

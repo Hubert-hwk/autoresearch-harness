@@ -1,0 +1,86 @@
+{
+  "schema_version": "benchmark-summary.v1",
+  "benchmark": "movielens-100k-bpr",
+  "date": "2026-08-19",
+  "dataset": {
+    "source": "https://files.grouplens.org/datasets/movielens/ml-100k.zip",
+    "min_rating": 4,
+    "rows": 55375,
+    "users": 942,
+    "items": 1447,
+    "converted_csv_sha256": "180b8db8d6b0d16dd46540919ab29535ada2e5407d082e2038d14b837bda4c49"
+  },
+  "protocol": {
+    "seeds": [20260801, 20260802, 20260803, 20260804, 20260805],
+    "confidence_level": 0.95,
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 20260819,
+    "min_primary_improvement": 0.001,
+    "min_guardrail_pass_rate": 1.0
+  },
+  "baseline": {
+    "params": {
+      "factors": 8,
+      "learning_rate": 0.05,
+      "regularization": 0.001,
+      "epochs": 3,
+      "negative_samples": 1
+    },
+    "mean_metrics": {
+      "ndcg_at_10": 0.03358,
+      "hit_rate_at_10": 0.0624204,
+      "coverage_at_10": 0.1358672,
+      "train_time_sec": 3.3270832
+    }
+  },
+  "candidate": {
+    "params": {
+      "factors": 8,
+      "learning_rate": 0.05,
+      "regularization": 0.001,
+      "epochs": 6,
+      "negative_samples": 1
+    },
+    "mean_metrics": {
+      "ndcg_at_10": 0.0380258,
+      "hit_rate_at_10": 0.0740976,
+      "coverage_at_10": 0.0883208,
+      "train_time_sec": 6.5332522
+    }
+  },
+  "paired_ndcg_improvements": [
+    0.01113,
+    0.003042,
+    0.00471,
+    -0.00068,
+    0.004027
+  ],
+  "paired_interval": {
+    "mean": 0.0044458,
+    "std": 0.004276920761482494,
+    "lower": 0.0013394,
+    "upper": 0.0082284
+  },
+  "decision": {
+    "value": "promote",
+    "blocking_gates": [],
+    "candidate_guardrail_pass_rate": 1.0
+  },
+  "replay": {
+    "status": "matched",
+    "trial_count": 10,
+    "mismatches": 0,
+    "drift_components": []
+  },
+  "source_evidence": {
+    "fingerprint_id": "f49a0ae2a84518c6a5d883ff14808aec776c5cddf988c6463b7aad0a5e62a198",
+    "verification_result_sha256": "ce9f44507d14af6f21f4d2092741ef5c11c7875d9408605e8e14c60207569e74",
+    "replay_manifest_sha256": "9c9f115e496bedcb3dc1f0b1efb33c352ba015c314a32c42f99b88b0c7284ce6",
+    "replay_result_sha256": "c845b5fce707a5135e707538006ed5036d799657aac813a23e5b9c4759f93f95"
+  },
+  "limitations": [
+    "Candidate uses twice the training epochs.",
+    "Catalog coverage regressed and was not a promotion gate.",
+    "Runtime is machine-dependent and excluded from replay metric matching."
+  ]
+}

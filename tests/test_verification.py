@@ -5,18 +5,22 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from autoresearch_harness.adapters.recommender_bpr import RecommenderBprExecutor
 from autoresearch_harness.models import (
     Budget,
     CommandExecution,
     MetricGoal,
     TaskSpec,
+    Trial,
     VerificationPolicy,
 )
+from autoresearch_harness.spec import load_task
 from autoresearch_harness.verification import (
     paired_bootstrap_interval,
     replay_verification,
@@ -25,6 +29,38 @@ from autoresearch_harness.verification import (
 
 
 class VerificationTest(unittest.TestCase):
+    def test_recommender_honors_injected_verification_seed(self) -> None:
+        task = load_task(ROOT / "examples" / "recommender_bpr" / "task.json")
+        task = replace(
+            task,
+            schema_version="task.v2",
+            metadata={"seeds": [999, 1000]},
+            verification=VerificationPolicy(
+                seed_parameter="seed",
+                seeds=[101, 202],
+            ),
+        )
+        params = {
+            "factors": 4,
+            "learning_rate": 0.03,
+            "regularization": 0.001,
+            "epochs": 8,
+            "negative_samples": 1,
+            "seed": 123,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            executor = RecommenderBprExecutor(task)
+            executor.set_run_dir(Path(tmp))
+            result = executor.run(Trial(id="verification_seed", params=params))
+            training_log = json.loads(
+                (Path(tmp) / "executor_artifacts" / "verification_seed" / "training_log.json")
+                .read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(1.0, result.metrics["seed_count"])
+        self.assertEqual([123], training_log["seeds"])
+        self.assertEqual(123, training_log["seed_results"][0]["seed"])
+
     def test_paired_bootstrap_is_deterministic(self) -> None:
         first = paired_bootstrap_interval(
             [0.1, 0.2, 0.3],

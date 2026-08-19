@@ -12,6 +12,13 @@ the project intends to use [Semantic Versioning](https://semver.org/).
 - Contributor, security, and citation guidance.
 - Multi-version test coverage and built-wheel installation smoke testing.
 - Accurate README guidance for LLM configuration and benchmark evidence.
+- A versioned MovieLens 100K paired-seed verification protocol and transparent
+  Results table, including coverage and runtime regressions.
+
+### Fixed
+
+- The BPR executor now honors the seed injected by `verify-run` instead of
+  reusing its default multi-seed aggregate for every declared pair.
 
 ## [0.3.0-dev] - 2026-08-19
 

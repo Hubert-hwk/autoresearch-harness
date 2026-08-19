@@ -1,10 +1,12 @@
 {
+  "schema_version": "task.v2",
   "name": "recommender_movielens_100k_bpr",
   "objective": "Validate the autoresearch harness on MovieLens 100K with real NumPy BPR training, multi-seed metrics, model artifacts, and provenance.",
   "executor": "recommender_bpr",
   "dataset": "../../data/external/ml-100k/interactions.csv",
   "budget": {
-    "max_trials": 12
+    "max_trials": 12,
+    "max_wall_time_seconds": 180
   },
   "search_space": {
     "factors": {
@@ -43,5 +45,23 @@
         "max": 120.0
       }
     ]
+  },
+  "verification": {
+    "protocol_version": "verification.v1",
+    "seed_parameter": "seed",
+    "seeds": [20260801, 20260802, 20260803, 20260804, 20260805],
+    "confidence_level": 0.95,
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 20260819,
+    "min_primary_improvement": 0.001,
+    "min_guardrail_pass_rate": 1.0,
+    "metric_tolerance": 1e-9,
+    "replay_metrics": [
+      "ndcg_at_10",
+      "hit_rate_at_10",
+      "coverage_at_10",
+      "seed_count"
+    ],
+    "fingerprint_paths": []
   }
 }

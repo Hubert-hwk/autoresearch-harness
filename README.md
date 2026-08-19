@@ -8,14 +8,14 @@
     <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache-2.0 license" /></a>
     <img src="https://img.shields.io/badge/roadmap-7%2F7%20phases-22c55e?style=flat-square" alt="7 of 7 phases complete" />
-    <img src="https://img.shields.io/badge/tests-43%20passing-0ea5e9?style=flat-square" alt="43 tests passing" />
+    <img src="https://img.shields.io/badge/tests-44%20passing-0ea5e9?style=flat-square" alt="44 tests passing" />
   </p>
 
   <img src="assets/autoresearch-method-overview.png" width="960" alt="Six-step autoresearch workflow from a versioned task through bounded search, isolated execution, experiment lineage, verification and replay, to validity-aware evidence memory; failures and drift remain retained evidence." />
 
   <p>
     <a href="#quick-start">Quick Start</a> ·
-    <a href="#evidence-snapshot">Evidence</a> ·
+    <a href="#results">Results</a> ·
     <a href="#how-it-works">Architecture</a> ·
     <a href="ROADMAP_V03.md">Roadmap</a> ·
     <a href="research/RESEARCH_DIRECTION_2026.md">Research</a> ·
@@ -49,7 +49,31 @@ It is built for a different question than “can an agent generate an answer?”
 - **Remember only replayed evidence** — admit durable claims only after a
   complete, drift-free verification and matched replay.
 
-## Evidence snapshot
+## Results
+
+### MovieLens 100K — paired verification and replay
+
+The versioned MovieLens protocol compares the same BPR configuration at 3 and
+6 epochs over five held-out seeds. The candidate cleared the predeclared
+NDCG@10 and guardrail gates, and an independent replay matched all 10 trials
+with zero metric mismatches.
+
+| Metric (mean over 5 paired seeds) | Baseline (3 epochs) | Candidate (6 epochs) | Change |
+|---|---:|---:|---:|
+| NDCG@10 | 0.033580 | 0.038026 | +0.004446 (+13.24%) |
+| HitRate@10 | 0.062420 | 0.074098 | +0.011677 |
+| Catalog coverage@10 | 0.135867 | 0.088321 | −0.047546 (−34.99%) |
+| Mean training time | 3.327 s | 6.533 s | +96.37% |
+
+The paired NDCG@10 improvement had a 95% bootstrap interval of
+`[+0.001339, +0.008228]`, above the declared `+0.001` promotion threshold.
+**Decision: `promote` under the declared gates; replay: `matched`.** Coverage
+was measured but was not a promotion guardrail, so its regression and the
+additional compute cost are explicit limitations—not hidden wins.
+
+See the [versioned protocol, paired observations, and audit](benchmarks/movielens-100k/2026-08-19/README.md).
+
+### Small BPR development audit
 
 The repository's included BPR evaluator produced the following development
 audit on the versioned toy interaction dataset. These numbers are deliberately
@@ -72,8 +96,6 @@ autoresearch research examples/recommender_bpr/task.json --agent rule
 ```
 
 See the [audit methodology and limitations](docs/benchmarks/recommender-bpr-audit.md).
-MovieLens 100K is included as a preparation pack, but no verified MovieLens
-result is claimed yet.
 
 ## Quick Start
 
