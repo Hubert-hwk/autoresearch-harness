@@ -1,7 +1,7 @@
 [project]
 name = "autoresearch-harness"
-version = "0.1.0"
-description = "A minimal autoresearch harness for business optimization trials."
+version = "0.3.0.dev0"
+description = "An auditable harness for agent-driven business and engineering optimization."
 requires-python = ">=3.10"
 dependencies = [
     "numpy==2.2.6",

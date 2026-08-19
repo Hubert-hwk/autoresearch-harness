@@ -39,3 +39,7 @@ def _values_for(spec: dict[str, Any]) -> list[Any]:
 
     raise ValueError(f"Unsupported search space type: {kind}")
 
+
+def search_space_values(spec: dict[str, Any]) -> list[Any]:
+    """Return the finite values represented by one search-space dimension."""
+    return _values_for(spec)

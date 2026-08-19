@@ -1,233 +1,237 @@
-# autoresearch-harness
+<div align="center">
+  <h1>autoresearch-harness</h1>
 
-AutoResearch harness MVP for business optimization loops.
+  <p><strong>Turn an optimization idea into bounded experiments, replayable evidence, and a promotion decision.</strong></p>
 
-See [AGENT.md](AGENT.md) for the project intent, current state, and the
-agentic AutoResearch harness roadmap.
+  <p>
+    <a href="https://github.com/Hubert-hwk/autoresearch-harness/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Hubert-hwk/autoresearch-harness/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
+    <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+" />
+    <img src="https://img.shields.io/badge/roadmap-7%2F7%20phases-22c55e?style=flat-square" alt="7 of 7 phases complete" />
+    <img src="https://img.shields.io/badge/tests-43%20passing-0ea5e9?style=flat-square" alt="43 tests passing" />
+    <a href="https://github.com/Hubert-hwk/autoresearch-harness/stargazers"><img src="https://img.shields.io/github/stars/Hubert-hwk/autoresearch-harness?style=flat-square" alt="GitHub stars" /></a>
+  </p>
 
-This project treats autoresearch as an engineering harness, not as an
-automatic paper writer. The first MVP focuses on bounded trial loops:
+  <img src="assets/autoresearch-method-overview.png" width="960" alt="Six-step autoresearch workflow from a versioned task through bounded search, isolated execution, experiment lineage, verification and replay, to validity-aware evidence memory; failures and drift remain retained evidence." />
 
-1. Load a business optimization task.
-2. Generate candidate trials from a search space.
-3. Execute each trial through a scenario adapter.
-4. Evaluate primary and guardrail metrics.
-5. Persist traceable run artifacts.
-6. Report the best candidate and useful negative results.
+  <p>
+    <a href="#quick-start">Quick Start</a> ·
+    <a href="#how-it-works">Architecture</a> ·
+    <a href="ROADMAP_V03.md">Roadmap</a> ·
+    <a href="research/RESEARCH_DIRECTION_2026.md">Research</a> ·
+    <a href="AGENT.md">Project Notes</a>
+  </p>
+</div>
+
+---
+
+`autoresearch-harness` is an empirical optimization engine for agent-driven
+business and engineering research. It runs declared evaluators under explicit
+budgets, isolates code changes, preserves the full experiment lineage, verifies
+promising candidates across repeated seeds, replays the evidence, and only then
+allows a result to become durable memory.
+
+It is built for a different question than “can an agent generate an answer?”:
+**can we inspect, reproduce, and trust the evidence behind a change?**
+
+## Why this project
+
+- **Execute real evaluators** — run trusted local commands without shell
+  interpolation and retain metrics, logs, artifacts, timing, and hashes.
+- **Keep experiments isolated** — apply typed patches inside detached Git
+  worktrees without switching or rewriting the active checkout.
+- **Preserve every decision** — model experiments as append-only,
+  hash-chained nodes with lineage, budget, evaluation, and disposition.
+- **Search within hard budgets** — use deterministic random sampling,
+  Successive Halving, multi-fidelity promotion, and a Pareto archive.
+- **Verify before promotion** — compare baseline and candidate over paired
+  seeds with deterministic bootstrap intervals and independent guardrail gates.
+- **Remember only replayed evidence** — admit durable claims only after a
+  complete, drift-free verification and matched replay.
 
 ## Quick Start
 
-```powershell
-.\scripts\run-demo.ps1
+The deterministic command-backed example needs no API key:
+
+```bash
+git clone https://github.com/Hubert-hwk/autoresearch-harness.git
+cd autoresearch-harness
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+autoresearch run examples/external_command/task.json
 ```
 
-Run the broader MVP validation suite with:
+Run the complete test suite:
+
+```bash
+python -m unittest discover -s tests
+```
+
+<details>
+<summary><strong>Windows PowerShell</strong></summary>
 
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+.\scripts\autoresearch.ps1 run examples\external_command\task.json
 .\scripts\run-validation.ps1
 ```
 
-Run the first agentic research loop with:
+</details>
 
-```powershell
-python -m autoresearch_harness research examples\prompt_tuning\task.json --branch-mode record
+## What you can run
+
+| Capability | Command | Evidence produced |
+|---|---|---|
+| Bounded task evaluation | `autoresearch run TASK` | trials, analysis, decisions, report |
+| Agentic research loop | `autoresearch research TASK` | hypothesis, mutation, effects, provenance |
+| Isolated source patch | `autoresearch patch-run TASK PATCH` | worktree, diff, audits, hashes |
+| Experiment graph audit | `autoresearch graph-status GRAPH_DIR` | validated graph snapshot |
+| Multi-fidelity search | `autoresearch adaptive-run TASK` | promotions, budgets, Pareto archive |
+| Independent verification | `autoresearch verify-run TASK BASELINE CANDIDATE` | paired interval, fingerprints, manifest |
+| Scientific replay | `autoresearch replay VERIFICATION_DIR` | drift and metric-match report |
+| Durable evidence memory | `autoresearch memory-ingest VERIFY_DIR REPLAY_RESULT` | typed claim and archived evidence bundle |
+
+### Verify, replay, remember
+
+```bash
+autoresearch verify-run \
+  examples/external_command/task.json \
+  examples/external_command/baseline_params.json \
+  examples/external_command/candidate_params.json \
+  --repo-root .
+
+autoresearch replay runs/verify_...
+
+autoresearch memory-ingest \
+  runs/verify_... \
+  runs/replay_.../replay_result.json \
+  --memory-dir memory
+
+autoresearch memory-query \
+  examples/external_command/task.json \
+  --memory-dir memory \
+  --repo-root .
 ```
 
-Run the model-parameter tuning example with:
+## How it works
 
-```powershell
-python -m autoresearch_harness research examples\model_param_tuning\task.json --branch-mode record
+```mermaid
+flowchart LR
+    T["Versioned TaskSpec"] --> S["Bounded Search"]
+    S --> E["Trusted Evaluator"]
+    E --> G["Experiment Graph"]
+    G --> V["Paired Verification"]
+    V --> R["Fingerprint-Gated Replay"]
+    R -->|"matched"| M["Evidence Memory"]
+    R -->|"drift or mismatch"| X["Retained Negative Evidence"]
+    M --> P["Next Research Plan"]
+    P --> S
 ```
 
-Run the NumPy BPR recommender example with:
+The durable path is intentionally narrower than the exploratory path:
 
-```powershell
-python -m autoresearch_harness research examples\recommender_bpr\task.json --branch-mode record
+```text
+hypothesis → candidate → evaluation → verification → replay → evidence memory
+                                      any failure ────────→ retained evidence
 ```
 
-Prepare and run the larger MovieLens 100K BPR validation pack with:
+### Evidence contracts
 
-```powershell
-python scripts\prepare_movielens_100k.py
-python -m autoresearch_harness research examples\recommender_movielens_100k\task.json --branch-mode record
-```
+| Contract | Purpose | Integrity boundary |
+|---|---|---|
+| `task.v2` | task, metrics, budgets, execution and mutation policy | strict schema validation |
+| `patch.v1` | bounded UTF-8 source changes | allowlisted paths + pre/post audit |
+| experiment events | immutable research lineage | sequence + SHA-256 hash chain |
+| `scheduling.v1` | deterministic multi-fidelity allocation | global trial/time/fidelity budgets |
+| `verification.v1` | repeated-seed promotion gate | paired interval + guardrail gates |
+| `fingerprint.v1` | execution identity | task/data/code/runtime components |
+| `replay.v1` | exact scientific reproduction | manifest hash + metric tolerance |
+| `evidence-memory.v1` | reusable verified knowledge | replay admission + validity + supersession |
 
-The MovieLens raw data and converted interactions are written under
-`data/external/ml-100k/`, which is intentionally ignored by git. The committed
-task file and preparation script make the validation reproducible without
-checking benchmark data or generated model artifacts into the repository.
+## Artifacts, not hidden state
 
-Run a bounded multi-round optimization loop with:
+Every run writes inspectable JSON, JSONL, Markdown, logs, and hashes under its
+run directory. Depending on the command, this includes:
 
-```powershell
-.\scripts\autoresearch.ps1 multi-round examples\recommender_bpr\task.json --max-rounds 2 --review-seed-count 5 --branch-mode record
-```
+- resolved task and parameter snapshots;
+- every successful, failed, timed-out, dominated, or rejected trial;
+- stdout, stderr, metrics, declared artifacts, and SHA-256 digests;
+- patch diffs, worktree identity, and filesystem audits;
+- append-only experiment and memory event streams;
+- paired statistics, execution fingerprints, and replay manifests;
+- human-readable reports and machine-readable decisions.
 
-The multi-round runner creates `runs/multi_round_<timestamp>/` with per-round
-input task snapshots, nested agentic runs, `optimization_trace.jsonl`,
-`round_summary.json`, and `report.md`. Accepted candidates are promoted as the
-next round's task. `needs_review` recommender rounds keep the same task contract
-but expand `metadata.seeds` for stronger validation before promotion.
+Generated runs, datasets, memory, and local development logs are Git-ignored.
 
-Inspect the latest agentic run, or a specific run, with:
+## Included evaluators
 
-```powershell
-.\scripts\autoresearch.ps1 status
-.\scripts\autoresearch.ps1 status --research-id agentic_...
-.\scripts\autoresearch.ps1 status --research-id agentic_... --json
-```
+| Adapter | What it demonstrates | External dependency |
+|---|---|---|
+| `external_command` | real command execution and artifact capture | trusted local command |
+| `recommender_bpr` | real multi-seed NumPy model training | NumPy |
+| `ranking_param_tuning` | deterministic ranking optimization | none |
+| `prompt_tuning` | bounded prompt-policy simulation | none |
+| `model_param_tuning` | serving-parameter simulation | none |
 
-Resume an interrupted agentic run with:
+The repository also includes a MovieLens 100K preparation and validation pack.
+Raw benchmark data is downloaded outside version control.
 
-```powershell
-.\scripts\autoresearch.ps1 resume --research-id agentic_...
-```
+## Safety model
 
-Use a model-backed research planner with an OpenAI-compatible API:
+The harness treats task files and evaluators as **trusted executable input**.
+It prevents shell interpolation, constrains declared patches, preserves the
+active worktree, checks evaluator side effects, enforces budgets, and detects
+evidence drift. A detached Git worktree is source isolation—not an OS or
+container security sandbox.
 
-```powershell
-$env:AUTORESEARCH_LLM_API_KEY="..."
-$env:AUTORESEARCH_LLM_MODEL="gpt-4.1-mini"
-python -m autoresearch_harness research examples\model_param_tuning\task.json --agent llm --branch-mode record
-```
+Do not run untrusted task definitions or evaluators without an external sandbox.
 
-If the package is installed in your project virtual environment, the same demo
-can also be launched with:
+## Roadmap
 
-```powershell
-python -m autoresearch_harness run examples\ranking_param_tuning\task.json
-```
+The seven-phase v0.3 execution-core plan is complete:
 
-For local development without installing the package, prefer the wrapper:
+- [x] Phase 0 — research baseline and architecture decision
+- [x] Phase 1 — real command execution contract
+- [x] Phase 2 — typed patch mutation and worktree isolation
+- [x] Phase 3 — immutable experiment graph
+- [x] Phase 4 — adaptive multi-fidelity scheduling
+- [x] Phase 5 — verification, fingerprints, and replay
+- [x] Phase 6 — validity-aware evidence memory
 
-```powershell
-.\scripts\autoresearch.ps1 run examples\ranking_param_tuning\task.json
-.\scripts\autoresearch.ps1 research examples\model_param_tuning\task.json --branch-mode record
-```
+Next work is stabilization: multi-writer coordination, stronger sequential
+statistics, signed provenance, OS-level isolation, and release discipline. See
+[ROADMAP_V03.md](ROADMAP_V03.md) and the phase reviews under [reviews/](reviews/).
 
-The command writes artifacts under `runs/<run_id>/`:
+## Research basis
 
-- `task.json`: the resolved task spec
-- `trials.jsonl`: every candidate and its result
-- `analysis.json`: pass rate, failure reasons, and top trials
-- `decisions.jsonl`: harness decisions and stop reason
-- `report.md`: compact human-readable summary
+The architecture follows a primary-source review of automated empirical
+research, software engineering agents, search and resource allocation,
+verification benchmarks, and long-term agent memory. The synthesized direction
+and paper index are available in:
 
-The `research` command creates a higher-level `runs/agentic_<timestamp>/`
-directory containing:
+- [Research direction](research/RESEARCH_DIRECTION_2026.md)
+- [Literature index](research/literature/README.md)
 
-- baseline and candidate run artifacts
-- `state.json`: resumable status, phase, run ids, and final decision
-- `events.jsonl`: ordered lifecycle events
-- `artifacts.jsonl`: artifact index for reports, metrics, decisions, and inputs
-- `provenance.jsonl`: evidence graph linking decisions to supporting artifacts
-- `memory_context.json`: ranked prior lessons used by the agent planner
-- `hypothesis.json`: agent-proposed optimization direction
-- `branch_lifecycle.json`: experiment branch phase and disposition record
-- `mutation_plan.json`: validated mutation protocol manifest derived from the
-  hypothesis
-- `mutation_artifact/candidate_task.json`: materialized candidate task used by
-  the candidate run
-- `mutation_artifact/mutation.diff`: git no-index diff between the baseline
-  task and materialized candidate task
-- `branch.json`: experiment branch metadata
-- `effect.json`: baseline-vs-candidate comparison
-- `decision.json`: accept/reject/retry/needs_review decision and next action
-- `agentic_result.json`: complete loop summary
-- `report.md`: human-readable agentic run report
+Third-party paper PDFs are intentionally excluded from Git; the index links to
+their original sources.
 
-## MVP Scope
+## Contributing
 
-The included adapters are:
+Issues and focused pull requests are welcome. A useful contribution should:
 
-- `ranking_param_tuning`: a local deterministic search/ranking simulation
-- `prompt_tuning`: a deterministic prompt optimization simulation
-- `model_param_tuning`: a deterministic model serving parameter simulation
-- `recommender_bpr`: a small real NumPy BPR recommender training and evaluation
-  loop
-  with three-seed aggregate metrics, model artifacts, training logs, and dataset
-  fingerprints. Runtime metrics separate per-seed mean/std from total trial
-  time through `train_time_sec_mean`, `train_time_sec_std`, and
-  `train_time_sec_total`.
-- `examples/recommender_movielens_100k`: a larger standard benchmark validation
-  pack using the same BPR adapter on MovieLens 100K prepared outside the repo
+1. preserve the generic `TaskSpec → Trial → Result → Decision` protocol;
+2. retain negative and failed evidence rather than silently dropping it;
+3. add tests for new success and failure paths;
+4. document the trust and reproducibility boundary it introduces.
 
-Together they demonstrate that the harness protocol is not tied to one
-business scenario.
+For architecture context, start with [AGENT.md](AGENT.md). For implementation
+sequencing, see [ROADMAP_V03.md](ROADMAP_V03.md).
 
-The first agentic loop is deterministic: a rule-based research agent reads
-baseline failure reasons, proposes a focused hypothesis, validates it, compares
-effects, and writes memory records under `memory/`.
+---
 
-There is also a provider-agnostic LLM interface in
-`src/autoresearch_harness/llm.py`. The default research agent is deterministic;
-`--agent llm` uses an OpenAI-compatible chat-completions client configured by
-environment variables. The LLM only proposes a bounded hypothesis and candidate
-search space; execution, metrics, guardrails, memory, and branch metadata remain
-controlled by the harness.
-
-The registry files make a research task inspectable after interruption: the
-system can recover which phase completed, which run ids were produced, and
-which artifacts contain the evidence trail.
-The `resume` command can continue from completed baseline, hypothesis, branch,
-or candidate phases without rerunning earlier completed phases.
-
-Before proposing a hypothesis, the agentic loop now builds a lightweight memory
-index from `memory/lessons.jsonl`. It ranks prior lessons by executor, failed
-guardrails, primary metric, and search-space parameter overlap, writes the
-selected context to `memory_context.json`, and links it into provenance as
-evidence for the hypothesis.
-
-After branch metadata is prepared, the harness converts the hypothesis into a
-`mutation_plan.json` manifest. In the current version, the protocol supports
-safe search-space mutations only: the candidate task may narrow parameter
-values within the original task bounds, but it cannot introduce unknown
-parameters or out-of-contract values. The candidate run is derived from this
-manifest rather than directly from free-form agent output.
-The mutation plan is then materialized into a candidate task artifact and a
-standard git diff. The candidate run reloads that materialized task, so the
-actual run input is inspectable and reproducible.
-
-Branch lifecycle is tracked separately from branch metadata. `branch.json`
-records the base and experiment branch identity; `branch_lifecycle.json`
-records the phases the experiment branch has passed through, including mutation
-attachment, candidate execution, final decision, and branch disposition. In
-`record` mode the disposition is `record_only`; in real branch mode, accepted
-experiments are retained for promotion while rejected or retry-worthy branches
-remain available for audit or follow-up.
-
-Agentic runs separate metric comparison from governance decisions:
-
-- `effect.json` records metric deltas and pass-rate deltas
-- `decision.json` records the harness decision, confidence, reasons,
-  blocking guardrails, and next action
-- `provenance.jsonl` records dependencies such as
-  `decision -> effect -> candidate analysis -> mutation artifact -> mutation diff`
-
-If a top trial exposes `<primary_metric>_std`, the decision engine treats
-primary-metric improvements smaller than the combined baseline/candidate
-standard deviation as `needs_review` rather than `accept`. This keeps
-multi-seed recommender experiments from promoting changes whose observed gain
-is within measurement noise.
-
-The `multi-round` command is the first continuation layer on top of single
-agentic runs. It records each round as an auditable child run and only promotes
-candidate task artifacts after an `accept` decision. Review-worthy recommender
-changes are revalidated with more seeds instead of being silently accepted.
-
-The intended extension points are:
-
-- add real executors under `src/autoresearch_harness/adapters/`
-- add richer policies under `src/autoresearch_harness/policy.py`
-- add stronger validation gates under `src/autoresearch_harness/evaluation.py`
-- plug in prompt/model/search/ad strategy experiments through the same
-  `TaskSpec -> Trial -> Result -> Decision` protocol
-
-## Task Contract
-
-The MVP task contract is JSON to keep the first version dependency-free. A task
-declares the executor, dataset, budget, search space, primary metric, guardrails,
-and optional `metadata`. Scenario-specific execution logic lives in adapters,
-while the run loop and artifact protocol stay shared. The BPR recommender
-adapter uses `metadata.seeds` when present; otherwise it falls back to the
-default three-seed validation set.
+<div align="center">
+  <strong>Auditable experiments over unverifiable automation.</strong><br />
+  <sub>If this direction is useful, consider starring the repository or opening a focused issue.</sub>
+</div>

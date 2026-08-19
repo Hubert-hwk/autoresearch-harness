@@ -21,11 +21,22 @@ from .branching import (
 )
 from .decision import decision_to_dict, make_decision
 from .effect import compare_runs
+from .evidence_memory import query_evidence_memory
 from .hypothesis import Hypothesis
 from .llm import OpenAICompatibleClient
 from .memory import MemoryManager
 from .memory_index import build_memory_context, compact_memory_context, records_from_context
-from .models import Budget, MetricGoal, RunSummary, TaskSpec, TrialResult
+from .models import (
+    AdaptiveScheduling,
+    Budget,
+    CommandExecution,
+    MetricGoal,
+    MutationPolicy,
+    RunSummary,
+    TaskSpec,
+    TrialResult,
+    VerificationPolicy,
+)
 from .mutation import (
     MutationArtifact,
     MutationPlan,
@@ -134,6 +145,7 @@ def _continue_agentic_research(
         research_dir=research_dir,
         registry=registry,
         memory_dir=memory_dir,
+        repo_root=repo_root,
         agent_kind=agent_kind,
         state=state,
     )
@@ -262,6 +274,7 @@ def _ensure_hypothesis(
     research_dir: Path,
     registry: ResearchRegistry,
     memory_dir: Path,
+    repo_root: Path,
     agent_kind: str,
     state: dict[str, Any],
 ):
@@ -282,11 +295,29 @@ def _ensure_hypothesis(
         )
         return hypothesis
     memory = MemoryManager(memory_dir)
+    evidence_context: dict[str, Any] = {
+        "matched": [],
+        "excluded": [],
+        "total_memories": 0,
+    }
+    if (memory_dir / "evidence_memory_events.jsonl").exists():
+        evidence_context = query_evidence_memory(
+            task,
+            memory_dir,
+            repo_root=repo_root,
+            limit=20,
+        )
+    evidence_records = [match["memory"] for match in evidence_context["matched"]]
     memory_context = build_memory_context(
         task,
         baseline_analysis,
-        memory.recent_lessons(limit=50),
+        memory.recent_lessons(limit=50) + evidence_records,
     )
+    memory_context["evidence_memory"] = {
+        "total_memories": evidence_context["total_memories"],
+        "matched_memories": len(evidence_context["matched"]),
+        "memory_ids": [match["memory_id"] for match in evidence_context["matched"]],
+    }
     memory_context_path = research_dir / "memory_context.json"
     _write_json(memory_context_path, memory_context)
     registry.artifact(
@@ -758,6 +789,68 @@ def _read_state(research_dir: Path) -> dict[str, Any]:
 def _task_from_state(state: dict[str, Any]) -> TaskSpec:
     task = state["task"]
     metrics = task["metrics"]
+    budget_data = task["budget"]
+    max_wall_time = budget_data.get("max_wall_time_seconds")
+    execution_data = task.get("execution")
+    execution = None
+    if execution_data is not None:
+        execution = CommandExecution(
+            command=list(execution_data["command"]),
+            working_directory=execution_data["working_directory"],
+            metrics_path=execution_data.get("metrics_path", "metrics.json"),
+            artifact_paths=list(execution_data.get("artifact_paths", [])),
+            timeout_seconds=float(execution_data.get("timeout_seconds", 300.0)),
+            environment=dict(execution_data.get("environment", {})),
+        )
+    mutation_data = task.get("mutation")
+    mutation_policy = None
+    if mutation_data is not None:
+        mutation_policy = MutationPolicy(
+            editable_paths=list(mutation_data["editable_paths"]),
+            allow_create=bool(mutation_data.get("allow_create", False)),
+            max_file_bytes=int(mutation_data.get("max_file_bytes", 1_000_000)),
+        )
+    scheduling_data = task.get("scheduling")
+    scheduling = None
+    if scheduling_data is not None:
+        fidelity = scheduling_data["fidelity"]
+        scheduling = AdaptiveScheduling(
+            fidelity_parameter=fidelity["parameter"],
+            fidelity_levels=[float(value) for value in fidelity["levels"]],
+            objectives=[
+                _metric_goal_from_dict(item)
+                for item in scheduling_data["objectives"]
+            ],
+            initial_candidates=int(scheduling_data.get("initial_candidates", 8)),
+            reduction_factor=int(scheduling_data.get("reduction_factor", 2)),
+            random_seed=int(scheduling_data.get("random_seed", 0)),
+            strategy=scheduling_data.get("strategy", "successive_halving"),
+            protocol_version=scheduling_data.get(
+                "protocol_version", "scheduling.v1"
+            ),
+        )
+    verification_data = task.get("verification")
+    verification = None
+    if verification_data is not None:
+        verification = VerificationPolicy(
+            seed_parameter=verification_data["seed_parameter"],
+            seeds=[int(seed) for seed in verification_data["seeds"]],
+            confidence_level=float(verification_data.get("confidence_level", 0.95)),
+            bootstrap_samples=int(verification_data.get("bootstrap_samples", 2000)),
+            bootstrap_seed=int(verification_data.get("bootstrap_seed", 0)),
+            min_primary_improvement=float(
+                verification_data.get("min_primary_improvement", 0.0)
+            ),
+            min_guardrail_pass_rate=float(
+                verification_data.get("min_guardrail_pass_rate", 1.0)
+            ),
+            metric_tolerance=float(verification_data.get("metric_tolerance", 1e-9)),
+            replay_metrics=list(verification_data.get("replay_metrics", [])),
+            fingerprint_paths=list(verification_data.get("fingerprint_paths", [])),
+            protocol_version=verification_data.get(
+                "protocol_version", "verification.v1"
+            ),
+        )
     return TaskSpec(
         name=task["name"],
         objective=task["objective"],
@@ -765,11 +858,24 @@ def _task_from_state(state: dict[str, Any]) -> TaskSpec:
         dataset=task.get("dataset"),
         metadata=dict(task.get("metadata", {})),
         search_space=task["search_space"],
-        budget=Budget(max_trials=int(task["budget"]["max_trials"])),
+        budget=Budget(
+            max_trials=int(budget_data["max_trials"]),
+            max_wall_time_seconds=float(max_wall_time) if max_wall_time is not None else None,
+            max_fidelity_units=(
+                float(budget_data["max_fidelity_units"])
+                if budget_data.get("max_fidelity_units") is not None
+                else None
+            ),
+        ),
         primary_metric=_metric_goal_from_dict(metrics["primary"]),
         guardrail_metrics=[
             _metric_goal_from_dict(item) for item in metrics.get("guardrails", [])
         ],
+        schema_version=task.get("schema_version", "task.v1"),
+        execution=execution,
+        mutation_policy=mutation_policy,
+        scheduling=scheduling,
+        verification=verification,
     )
 
 

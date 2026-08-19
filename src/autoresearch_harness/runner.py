@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,8 +34,16 @@ def run_task(task, runs_dir: Path) -> RunSummary:
     best: TrialResult | None = None
     results: list[TrialResult] = []
     total = 0
+    started = time.monotonic()
+    wall_time_exhausted = False
     with (run_dir / "trials.jsonl").open("w", encoding="utf-8") as trials_file:
         for trial in generate_trials(task):
+            if (
+                task.budget.max_wall_time_seconds is not None
+                and time.monotonic() - started >= task.budget.max_wall_time_seconds
+            ):
+                wall_time_exhausted = True
+                break
             result = executor.run(trial)
             results.append(result)
             total += 1
@@ -47,7 +56,10 @@ def run_task(task, runs_dir: Path) -> RunSummary:
         json.dumps(analysis, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    stop_reason = "budget_exhausted" if total >= task.budget.max_trials else "search_space_exhausted"
+    if wall_time_exhausted:
+        stop_reason = "wall_time_budget_exhausted"
+    else:
+        stop_reason = "budget_exhausted" if total >= task.budget.max_trials else "search_space_exhausted"
     summary = RunSummary(
         run_id=run_id,
         task_name=task.name,

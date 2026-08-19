@@ -1,0 +1,10 @@
+{"id": "q01", "signal": 0.90, "context": 0.20, "label": 1}
+{"id": "q02", "signal": 0.82, "context": 0.40, "label": 1}
+{"id": "q03", "signal": 0.68, "context": 0.50, "label": 1}
+{"id": "q04", "signal": 0.58, "context": 0.80, "label": 1}
+{"id": "q05", "signal": 0.51, "context": 0.10, "label": 0}
+{"id": "q06", "signal": 0.43, "context": 0.30, "label": 0}
+{"id": "q07", "signal": 0.35, "context": 0.70, "label": 0}
+{"id": "q08", "signal": 0.24, "context": 0.20, "label": 0}
+{"id": "q09", "signal": 0.71, "context": 0.10, "label": 1}
+{"id": "q10", "signal": 0.47, "context": 0.90, "label": 1}

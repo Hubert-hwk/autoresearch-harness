@@ -1,7 +1,10 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 runs/
 memory/
 data/external/
+dev-logs/
+research/literature/papers/
