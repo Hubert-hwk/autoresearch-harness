@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use autoresearch-harness in research, please cite this software."
+title: "autoresearch-harness"
+type: software
+authors:
+  - family-names: "He"
+    given-names: "WenKang"
+repository-code: "https://github.com/Hubert-hwk/autoresearch-harness"
+url: "https://github.com/Hubert-hwk/autoresearch-harness"
+license: "Apache-2.0"
