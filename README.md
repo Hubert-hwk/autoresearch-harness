@@ -6,15 +6,16 @@
   <p>
     <a href="https://github.com/Hubert-hwk/autoresearch-harness/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Hubert-hwk/autoresearch-harness/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
     <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache-2.0 license" /></a>
     <img src="https://img.shields.io/badge/roadmap-7%2F7%20phases-22c55e?style=flat-square" alt="7 of 7 phases complete" />
     <img src="https://img.shields.io/badge/tests-43%20passing-0ea5e9?style=flat-square" alt="43 tests passing" />
-    <a href="https://github.com/Hubert-hwk/autoresearch-harness/stargazers"><img src="https://img.shields.io/github/stars/Hubert-hwk/autoresearch-harness?style=flat-square" alt="GitHub stars" /></a>
   </p>
 
   <img src="assets/autoresearch-method-overview.png" width="960" alt="Six-step autoresearch workflow from a versioned task through bounded search, isolated execution, experiment lineage, verification and replay, to validity-aware evidence memory; failures and drift remain retained evidence." />
 
   <p>
     <a href="#quick-start">Quick Start</a> ·
+    <a href="#evidence-snapshot">Evidence</a> ·
     <a href="#how-it-works">Architecture</a> ·
     <a href="ROADMAP_V03.md">Roadmap</a> ·
     <a href="research/RESEARCH_DIRECTION_2026.md">Research</a> ·
@@ -47,6 +48,32 @@ It is built for a different question than “can an agent generate an answer?”
   seeds with deterministic bootstrap intervals and independent guardrail gates.
 - **Remember only replayed evidence** — admit durable claims only after a
   complete, drift-free verification and matched replay.
+
+## Evidence snapshot
+
+The repository's included BPR evaluator produced the following development
+audit on the versioned toy interaction dataset. These numbers are deliberately
+reported with the harness decision—not just the largest metric:
+
+| Run | Best NDCG@10 | Search budget | Outcome |
+|---|---:|---:|---|
+| Baseline search | 0.187161 | 8 trials | reference |
+| Focused candidate search | 0.218775 | 4 trials | `needs_review` |
+
+The observed delta was `+0.031614`, but observed metric noise was `0.082306`.
+The harness therefore did **not** promote the candidate; it requested more
+seeds or a larger validation split. This is the intended evidence-first
+behavior: an encouraging point estimate is not yet a trustworthy claim.
+
+Run the same bounded workflow locally:
+
+```bash
+autoresearch research examples/recommender_bpr/task.json --agent rule
+```
+
+See the [audit methodology and limitations](docs/benchmarks/recommender-bpr-audit.md).
+MovieLens 100K is included as a preparation pack, but no verified MovieLens
+result is claimed yet.
 
 ## Quick Start
 
@@ -92,6 +119,42 @@ python -m pip install -e .
 | Independent verification | `autoresearch verify-run TASK BASELINE CANDIDATE` | paired interval, fingerprints, manifest |
 | Scientific replay | `autoresearch replay VERIFICATION_DIR` | drift and metric-match report |
 | Durable evidence memory | `autoresearch memory-ingest VERIFY_DIR REPLAY_RESULT` | typed claim and archived evidence bundle |
+
+## LLM configuration
+
+The default research agent is deterministic and requires no API key:
+
+```bash
+autoresearch research examples/recommender_bpr/task.json --agent rule
+```
+
+The optional `llm` agent currently supports OpenAI-compatible Chat Completions
+endpoints. Configure it with:
+
+```bash
+export AUTORESEARCH_LLM_API_KEY="..."      # falls back to OPENAI_API_KEY
+export AUTORESEARCH_LLM_MODEL="gpt-4.1-mini"
+export AUTORESEARCH_LLM_BASE_URL="https://api.openai.com/v1"
+autoresearch research examples/recommender_bpr/task.json --agent llm
+```
+
+Changing the base URL can connect another provider only when that provider is
+wire-compatible with the endpoint used by the client. Native Anthropic API
+support is not currently implemented. The LLM proposes a bounded hypothesis;
+the same declared evaluator, budgets, evidence capture, and decision policy
+remain in control of execution.
+
+```mermaid
+flowchart LR
+    H["Hypothesis generation"] --> P["Bounded experiment plan"]
+    P --> E["Execution"]
+    E --> V["Evidence evaluation"]
+    V --> D{"Promotion gate"}
+    D -->|"promote"| K["Verified knowledge"]
+    D -->|"reject / review"| N["Retained evidence"]
+    K --> H
+    N --> H
+```
 
 ### Verify, replay, remember
 
@@ -178,6 +241,24 @@ Generated runs, datasets, memory, and local development logs are Git-ignored.
 The repository also includes a MovieLens 100K preparation and validation pack.
 Raw benchmark data is downloaded outside version control.
 
+## Why autoresearch-harness?
+
+The project complements search libraries and tracking systems. It does not
+claim that they cannot retain trials or artifacts; its distinction is that the
+promotion and replay gates are first-class parts of one evidence contract.
+
+| Capability | autoresearch-harness | Optuna | MLflow | General agent frameworks |
+|---|:---:|:---:|:---:|:---:|
+| Search and pruning | Built in | Built in | Not primary scope | Varies |
+| Run and artifact tracking | Built in | Trial metadata | Built in | Varies |
+| Hash-chained experiment lineage | Built in | Custom | Custom | Varies |
+| Paired-seed promotion gate | Built in | Custom | Custom | Varies |
+| Fingerprint-gated scientific replay | Built in | Custom | Custom | Varies |
+| Validity-aware verified memory | Built in | Custom | Custom | Varies |
+
+“Custom” means the capability can be assembled around that tool; it is not a
+claim that the ecosystem lacks the underlying primitives.
+
 ## Safety model
 
 The harness treats task files and evaluators as **trusted executable input**.
@@ -226,8 +307,29 @@ Issues and focused pull requests are welcome. A useful contribution should:
 3. add tests for new success and failure paths;
 4. document the trust and reproducibility boundary it introduces.
 
-For architecture context, start with [AGENT.md](AGENT.md). For implementation
-sequencing, see [ROADMAP_V03.md](ROADMAP_V03.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. For
+architecture context, start with [AGENT.md](AGENT.md). For implementation
+sequencing, see [ROADMAP_V03.md](ROADMAP_V03.md). Please report vulnerabilities
+according to [SECURITY.md](SECURITY.md).
+
+## Citation
+
+Citation metadata is available in [CITATION.cff](CITATION.cff). A minimal
+software citation is:
+
+```bibtex
+@software{autoresearch_harness_2026,
+  author = {He, WenKang},
+  title = {autoresearch-harness},
+  year = {2026},
+  url = {https://github.com/Hubert-hwk/autoresearch-harness}
+}
+```
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE), which permits commercial use
+and includes an explicit patent grant. See the license text for its conditions.
 
 ---
 

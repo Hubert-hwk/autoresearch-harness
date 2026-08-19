@@ -1,11 +1,51 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "autoresearch-harness"
 version = "0.3.0.dev0"
-description = "An auditable harness for agent-driven business and engineering optimization."
+description = "Evidence-first infrastructure for bounded, reproducible AI research experiments."
+readme = "README.md"
 requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "He WenKang" },
+]
+keywords = [
+    "agentic-ai",
+    "experiment-tracking",
+    "mlops",
+    "optimization",
+    "reproducibility",
+    "research-agent",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "numpy==2.2.6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Hubert-hwk/autoresearch-harness"
+Documentation = "https://github.com/Hubert-hwk/autoresearch-harness#readme"
+Issues = "https://github.com/Hubert-hwk/autoresearch-harness/issues"
+Source = "https://github.com/Hubert-hwk/autoresearch-harness"
+
 [project.scripts]
 autoresearch = "autoresearch_harness.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
